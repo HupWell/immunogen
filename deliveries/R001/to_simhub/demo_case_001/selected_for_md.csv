@@ -1,0 +1,3 @@
+﻿mutation,mut_peptide,wt_peptide,variant_vaf,hla_allele,affinity_nM,rank_score,dissimilarity
+TP53_R175H_1,HMTEVVRHC,HMTEVVRRC,0.21,HLA-B*40:01,,0.325,0.1111111111111111
+KRAS_G12D_1,VVGADGVGK,VVGAGGVGK,0.32,HLA-A*11:01,,0.2249999999999999,0.1111111111111111

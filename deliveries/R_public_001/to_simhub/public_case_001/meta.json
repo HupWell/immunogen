@@ -1,0 +1,13 @@
+{
+  "run_id": "R_public_001",
+  "case_id": "public_case_001",
+  "molecule_type": "peptide_mhc",
+  "delivery_stage": "coarse_initial_complex",
+  "top_k_for_md": 5,
+  "selected_for_md_file": "selected_for_md.csv",
+  "notes": [
+    "protein.pdb 当前为粗粒度初始构象，可用于流程对接，建议替换为真实 peptide-MHC 建模结果。",
+    "ligand.sdf 当前为占位文件，用于占位保持接口一致。",
+    "建议后续使用 AlphaFold-Multimer 或 PANDORA 构建复合物初始构象。"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "R_public_001",
+  "case_id": "public_case_001",
+  "source": "public_dataset",
+  "input_csv": "data/public/combined_public.csv",
+  "rows_after_normalization": 51,
+  "column_map": {
+    "mut_peptide": "MT_pep",
+    "wt_peptide": "WT_pep",
+    "mutation": "gene_change",
+    "variant_vaf": "vaf",
+    "transcript_id": "transcript"
+  }
+}
