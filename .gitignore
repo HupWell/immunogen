@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Conda / virtual env
+.conda/
+conda-meta/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project outputs
+results/
+
+# Simulation delivery heavy files
+deliveries/**/to_simhub/**/protein.pdb
+deliveries/**/to_simhub/**/ligand.sdf
+
+# Optional cache/tmp
+*.log
+tmp/
+temp/

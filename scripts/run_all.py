@@ -1,0 +1,140 @@
+# -*- coding: utf-8 -*-
+"""
+功能：一键串行执行 ImmunoGen MVP 全流程。
+执行顺序：
+1) validate_input.py
+2) predict_mhc_ranking.py
+3) select_top_peptides.py
+4) build_multivalent_mrna.py
+5) run_qc_and_report.py
+6) prepare_simhub_delivery.py
+7) validate_feasibility.py
+"""
+import os
+import sys
+import argparse
+import subprocess
+
+
+def run_step(command: list):
+    """执行单个步骤并打印命令，失败时立即退出。"""
+    print(f"\n[执行] {' '.join(command)}")
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"步骤执行失败，退出码: {result.returncode}")
+
+
+def main(
+    run_id: str,
+    top_n: int,
+    min_dissimilarity: float,
+    linker: str,
+    poly_a_len: int,
+    codon_mode: str,
+    top_k_md: int,
+    feasibility_top_n: int
+):
+    """按固定顺序执行全流程。"""
+    python_exe = sys.executable
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+
+    step1 = [
+        python_exe,
+        os.path.join(scripts_dir, "validate_input.py"),
+        "--run_id",
+        run_id,
+    ]
+    step2 = [
+        python_exe,
+        os.path.join(scripts_dir, "predict_mhc_ranking.py"),
+        "--run_id",
+        run_id,
+    ]
+    step3 = [
+        python_exe,
+        os.path.join(scripts_dir, "select_top_peptides.py"),
+        "--run_id",
+        run_id,
+        "--top_n",
+        str(top_n),
+        "--min_dissimilarity",
+        str(min_dissimilarity),
+    ]
+    step4 = [
+        python_exe,
+        os.path.join(scripts_dir, "build_multivalent_mrna.py"),
+        "--run_id",
+        run_id,
+        "--linker",
+        linker,
+        "--poly_a_len",
+        str(poly_a_len),
+        "--codon_mode",
+        codon_mode,
+    ]
+    step5 = [
+        python_exe,
+        os.path.join(scripts_dir, "run_qc_and_report.py"),
+        "--run_id",
+        run_id,
+    ]
+    step6 = [
+        python_exe,
+        os.path.join(scripts_dir, "prepare_simhub_delivery.py"),
+        "--run_id",
+        run_id,
+        "--top_k",
+        str(top_k_md),
+    ]
+    step7 = [
+        python_exe,
+        os.path.join(scripts_dir, "validate_feasibility.py"),
+        "--run_id",
+        run_id,
+        "--top_n",
+        str(feasibility_top_n),
+    ]
+
+    print("开始执行 ImmunoGen MVP 全流程...")
+    run_step(step1)
+    run_step(step2)
+    run_step(step3)
+    run_step(step4)
+    run_step(step5)
+    run_step(step6)
+    run_step(step7)
+    print("\n全部步骤执行完成。")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run_id", required=True, help="例如 R001")
+    parser.add_argument("--top_n", type=int, default=10, help="Top 候选肽数量，默认 10")
+    parser.add_argument(
+        "--min_dissimilarity",
+        type=float,
+        default=0.1,
+        help="与 WT 的最小差异比例阈值，默认 0.1",
+    )
+    parser.add_argument("--linker", default="AAY", help="肽段连接子，默认 AAY")
+    parser.add_argument("--poly_a_len", type=int, default=120, help="polyA 长度，默认 120")
+    parser.add_argument(
+        "--codon_mode",
+        default="optimized",
+        choices=["basic", "optimized", "lineardesign"],
+        help="密码子模式，默认 optimized",
+    )
+    parser.add_argument("--top_k_md", type=int, default=3, help="提交 SimHub 的 Top K，默认 3")
+    parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
+    args = parser.parse_args()
+
+    main(
+        run_id=args.run_id,
+        top_n=args.top_n,
+        min_dissimilarity=args.min_dissimilarity,
+        linker=args.linker,
+        poly_a_len=args.poly_a_len,
+        codon_mode=args.codon_mode,
+        top_k_md=args.top_k_md,
+        feasibility_top_n=args.feasibility_top_n,
+    )
