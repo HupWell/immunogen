@@ -35,6 +35,9 @@ def main(
     top_k_md: int,
     feasibility_top_n: int,
     mhc2_backend: str,
+    wi_deepimmuno: float,
+    wi_prime: float,
+    wi_repitope: float,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -53,6 +56,12 @@ def main(
         run_id,
         "--mhc2_backend",
         mhc2_backend,
+        "--wi_deepimmuno",
+        str(wi_deepimmuno),
+        "--wi_prime",
+        str(wi_prime),
+        "--wi_repitope",
+        str(wi_repitope),
     ]
     step3 = [
         python_exe,
@@ -143,6 +152,9 @@ if __name__ == "__main__":
         choices=["auto", "proxy", "netmhciipan"],
         help="MHC-II：auto=有 NetMHCIIpan 与 II 分型则实跑否则代理；见 predict_mhc_ranking 说明。",
     )
+    parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
+    parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")
+    parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
     args = parser.parse_args()
 
     main(
@@ -155,4 +167,7 @@ if __name__ == "__main__":
         top_k_md=args.top_k_md,
         feasibility_top_n=args.feasibility_top_n,
         mhc2_backend=args.mhc2_backend,
+        wi_deepimmuno=args.wi_deepimmuno,
+        wi_prime=args.wi_prime,
+        wi_repitope=args.wi_repitope,
     )

@@ -172,7 +172,17 @@ def _prepare_mhc2_lookup(
     return None, "proxy"
 
 
-def main(run_id: str, w1: float, w2: float, w3: float, w4: float, mhc2_backend: str = "auto"):
+def main(
+    run_id: str,
+    w1: float,
+    w2: float,
+    w3: float,
+    w4: float,
+    mhc2_backend: str = "auto",
+    wi_deepimmuno: float = 1.0,
+    wi_prime: float = 1.0,
+    wi_repitope: float = 1.0,
+):
     """
     主流程：
     1) 定位输入输出路径；
@@ -247,6 +257,9 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float, mhc2_backend: 
                 m2s = mhc2_proxy_score(pep, str(pr["allele"]))
                 m2src = "proxy"
                 m2el, m2ba, m2a2 = None, None, ""
+            immunogenicity_deepimmuno = deepimmuno_proxy(pep)
+            immunogenicity_prime = prime_proxy(pep)
+            immunogenicity_repitope = repitope_proxy(pep)
             rows.append({
                 "mutation": row.get("mutation", ""),
                 "mut_peptide": pep,
@@ -259,9 +272,14 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float, mhc2_backend: 
                 "mhc2_ba_nm": m2ba,
                 "mhc2_class2_allele": m2a2,
                 "mhc2_backend": m2src,
-                "deepimmuno_score": deepimmuno_proxy(pep),
-                "prime_score": prime_proxy(pep),
-                "repitope_score": repitope_proxy(pep),
+                # 新契约列：免疫原性分项
+                "immunogenicity_deepimmuno": immunogenicity_deepimmuno,
+                "immunogenicity_prime": immunogenicity_prime,
+                "immunogenicity_repitope": immunogenicity_repitope,
+                # 兼容旧列名（后续逐步淘汰）
+                "deepimmuno_score": immunogenicity_deepimmuno,
+                "prime_score": immunogenicity_prime,
+                "repitope_score": immunogenicity_repitope,
                 "wt_peptide_dissimilarity": hamming_dissimilarity(pep, row.get("wt_peptide", "")),
             })
 
@@ -275,9 +293,14 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float, mhc2_backend: 
     if "mhc2_ba_nm" in out.columns:
         out["mhc2_ba_nm"] = pd.to_numeric(out["mhc2_ba_nm"], errors="coerce")
     out["variant_vaf"] = pd.to_numeric(out["variant_vaf"], errors="coerce").fillna(0.0)
+    immuno_weight_sum = wi_deepimmuno + wi_prime + wi_repitope
+    if np.isclose(immuno_weight_sum, 0.0):
+        raise ValueError("免疫原性子权重和不能为 0，请调整 --wi_* 参数。")
     out["immunogenicity"] = (
-        out["deepimmuno_score"] + out["prime_score"] + out["repitope_score"]
-    ) / 3.0
+        wi_deepimmuno * out["immunogenicity_deepimmuno"]
+        + wi_prime * out["immunogenicity_prime"]
+        + wi_repitope * out["immunogenicity_repitope"]
+    ) / immuno_weight_sum
 
     # 标准化综合打分：rank_score = w1*HLA_affinity + w2*immunogenicity + w3*VAF + w4*dissimilarity
     out["hla_affinity_norm"] = minmax_series(out["affinity_nM"], reverse=True)
@@ -305,6 +328,9 @@ if __name__ == "__main__":
     parser.add_argument("--w2", type=float, default=0.25, help="immunogenicity 权重")
     parser.add_argument("--w3", type=float, default=0.15, help="VAF 权重")
     parser.add_argument("--w4", type=float, default=0.15, help="wt_dissimilarity 权重")
+    parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
+    parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")
+    parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
     parser.add_argument(
         "--mhc2_backend",
         default="auto",
@@ -312,4 +338,14 @@ if __name__ == "__main__":
         help="MHC-II 层: auto=有工具与 II 等位则 NetMHCIIpan 否则代理; proxy=仅代理; netmhciipan=强制（失败则报错）",
     )
     args = parser.parse_args()
-    main(args.run_id, args.w1, args.w2, args.w3, args.w4, mhc2_backend=args.mhc2_backend)
+    main(
+        args.run_id,
+        args.w1,
+        args.w2,
+        args.w3,
+        args.w4,
+        mhc2_backend=args.mhc2_backend,
+        wi_deepimmuno=args.wi_deepimmuno,
+        wi_prime=args.wi_prime,
+        wi_repitope=args.wi_repitope,
+    )
