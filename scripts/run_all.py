@@ -33,7 +33,8 @@ def main(
     poly_a_len: int,
     codon_mode: str,
     top_k_md: int,
-    feasibility_top_n: int
+    feasibility_top_n: int,
+    mhc2_backend: str,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -50,6 +51,8 @@ def main(
         os.path.join(scripts_dir, "predict_mhc_ranking.py"),
         "--run_id",
         run_id,
+        "--mhc2_backend",
+        mhc2_backend,
     ]
     step3 = [
         python_exe,
@@ -134,6 +137,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--top_k_md", type=int, default=3, help="提交 SimHub 的 Top K，默认 3")
     parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
+    parser.add_argument(
+        "--mhc2_backend",
+        default="auto",
+        choices=["auto", "proxy", "netmhciipan"],
+        help="MHC-II：auto=有 NetMHCIIpan 与 II 分型则实跑否则代理；见 predict_mhc_ranking 说明。",
+    )
     args = parser.parse_args()
 
     main(
@@ -145,4 +154,5 @@ if __name__ == "__main__":
         codon_mode=args.codon_mode,
         top_k_md=args.top_k_md,
         feasibility_top_n=args.feasibility_top_n,
+        mhc2_backend=args.mhc2_backend,
     )

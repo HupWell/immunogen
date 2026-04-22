@@ -1,5 +1,13 @@
 # ImmunoGen Release Notes
 
+## v0.2.3 - NetMHCIIpan 子进程调用层
+
+- 新增 **`scripts/netmhciipan_runner.py`**：解析 `netMHCIIpan` 4.x 标准输出表头；`NETMHCIIPAN_BIN` / `NETMHCIIPAN_HOME` 等见 **`docs/netmhciipan_setup.md`**。
+- **`predict_mhc_ranking.py` / `run_all.py`**：`--mhc2_backend auto|proxy|netmhciipan`；`peptide_mhc_ranking.csv` 增加 `mhc2_el_rank`、`mhc2_ba_nm`、`mhc2_class2_allele`、`mhc2_backend`。
+- **`prepare_self_certification.py`**：按排名表中的 MHC-II 实现方式更新 **SELF_CHECK** 表格行。
+
+---
+
 ## v0.2.2 - NetMHCIIpan 等位基因映射表 + 白话文档
 
 - 新增 **`data/hla_allele_map_netmhciipan.json`**（`manual_overrides` 手工表，默认可空）、**`scripts/hla_allele_to_netmhciipan.py`**（常见简写补 `HLA-` 前缀）。

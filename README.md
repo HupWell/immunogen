@@ -68,6 +68,8 @@ mhcflurry-downloads fetch
 - `hla_typing.json` — **必备** `HLA-A` / `HLA-B` / `HLA-C`；**可选** II 类：`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`（供 NetMHCIIpan 等；OptiType 仅 I 类，II 常由 HLA-HD 等补充）。完整说明与上游映射见 **`docs/hla_typing.md`**，含 II 示例 `data/examples/hla_typing.class_ii.example.json`。
 - `meta.json`（建议含 `case_id`，用于 `to_simhub` 子目录名）
 
+**NetMHCIIpan（MHC-II，可选）**：安装并配置 `NETMHCIIPAN_BIN` 等后，使用 `--mhc2_backend auto`（默认，能跑则跑）或 `netmhciipan`；无工具仍可用 `proxy` 仅跑通。说明见 **`docs/netmhciipan_setup.md`**。
+
 ---
 
 ## 4. 一键运行（推荐）
@@ -75,7 +77,7 @@ mhcflurry-downloads fetch
 ```bash
 conda activate immunogen
 set PYTHONUTF8=1
-python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasibility_top_n 20
+python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasibility_top_n 20 --mhc2_backend auto
 ```
 
 ---
@@ -119,3 +121,4 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
 - `docs/hla_typing.md` — **`hla_typing.json` 字段说明**（I 类必备、II 类可选、与上游字段对照）
 - `docs/allele_naming_simple.md` — **等位基因/NetMHC 写给非生信背景**（简写、映射表、和 JSON 怎么配合）
 - `data/hla_allele_map_netmhciipan.json` — **BioDriver → NetMHCIIpan** 工具有时对不上的「手工改一行」表（可空，靠脚本默认补 `HLA-`）
+- `docs/netmhciipan_setup.md` — **安装 NetMHCIIpan、环境变量、与 `--mhc2_backend` 衔接**

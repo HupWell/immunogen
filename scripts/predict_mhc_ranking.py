@@ -3,8 +3,9 @@
 脚本名称：predict_mhc_ranking.py
 主要功能：
 1) 读取 BioDriver 提供的候选突变肽和 HLA 分型；
-2) 使用 MHCflurry 预测每条突变肽与病人 HLA 的结合亲和力；
-3) 生成最基础的排名文件 peptide_mhc_ranking.csv。
+2) 使用 MHCflurry 预测每条突变肽与病人 HLA-I 的结合亲和力；
+3) 可选使用 NetMHCIIpan（`--mhc2_backend`）做 MHC-II 层评分，否则使用代理分；
+4) 生成排名文件 peptide_mhc_ranking.csv。
 
 输入文件：
 - deliveries/<run_id>/to_immunogen/neoantigen_candidates.csv
@@ -17,9 +18,17 @@
 import os
 import json
 import argparse
+from typing import Any, Dict, Optional, Tuple
+
 import pandas as pd
 from mhcflurry import Class1AffinityPredictor
 import numpy as np
+
+from netmhciipan_runner import (
+    build_peptide_mhc2_lookup,
+    resolve_netmhciipan_bin,
+    collect_netmhcii_alleles,
+)
 
 
 def flatten_hla(hla_json: dict):
@@ -80,6 +89,12 @@ def hamming_dissimilarity(mut_peptide: str, wt_peptide: str) -> float:
     return diff / len(mut_peptide)
 
 
+def mhc2_score_from_el_rank(pct_rank_el: float) -> float:
+    """%Rank EL 越小越好，转成 0~1 分（越大表示 II 类呈递预测越好，便于与 proxy 同量纲）。"""
+    v = 1.0 - float(pct_rank_el) / 100.0
+    return round(max(0.0, min(1.0, v)), 4)
+
+
 def mhc2_proxy_score(peptide: str, hla_allele: str) -> float:
     """
     MHC-II 代理评分（0-1）：
@@ -123,13 +138,48 @@ def repitope_proxy(peptide: str) -> float:
     return round(max(0.0, min(1.0, score)), 4)
 
 
-def main(run_id: str, w1: float, w2: float, w3: float, w4: float):
+def _prepare_mhc2_lookup(
+    hla_json: dict,
+    candidate_peptides: list,
+    mhc2_backend: str,
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    """
+    按 backend 预计算 (peptide->NetMHCIIpan 行, 或 None)；返回 (lookup 或 None, 实际模式说明)。
+    auto：能调用真实工具且 hla 含可转换的 II 类时尝试，否则 None（下游用 proxy）。
+    """
+    b = mhc2_backend.lower().strip()
+    if b == "proxy":
+        return None, "proxy"
+    if b not in ("auto", "netmhciipan"):
+        raise ValueError("mhc2_backend 须为 auto / proxy / netmhciipan")
+
+    if b == "netmhciipan":
+        if not resolve_netmhciipan_bin():
+            raise FileNotFoundError("mhc2_backend=netmhciipan 但未找到可执行文件，请设置 NETMHCIIPAN_BIN 或 PATH。")
+        if not collect_netmhcii_alleles(hla_json):
+            raise ValueError("hla_typing 中无可用 II 类（自动转换失败），请补充 HLA-DRB1*… 等或改用 proxy。")
+        lu, st = build_peptide_mhc2_lookup(hla_json, candidate_peptides)
+        if st != "ok" or not lu:
+            raise RuntimeError(f"NetMHCIIpan 未得到可用结果: {st}")
+        return lu, "netmhciipan"
+
+    # auto
+    if resolve_netmhciipan_bin() and collect_netmhcii_alleles(hla_json):
+        lu, st = build_peptide_mhc2_lookup(hla_json, candidate_peptides)
+        if st == "ok" and lu:
+            return lu, "netmhciipan"
+        print(f"NetMHCIIpan（auto）未使用，将回退 proxy。原因: {st}")
+    return None, "proxy"
+
+
+def main(run_id: str, w1: float, w2: float, w3: float, w4: float, mhc2_backend: str = "auto"):
     """
     主流程：
     1) 定位输入输出路径；
     2) 读取候选肽和 HLA；
     3) 对每条突变肽做 MHC-I 亲和力预测；
-    4) 按亲和力生成初版 rank_score 并输出 CSV。
+    4) 可选：NetMHCIIpan 对 II 类（见 --mhc2_backend）；
+    5) 按亲和力生成初版 rank_score 并输出 CSV。
     """
     # 根据 run_id 拼接输入目录与输出目录
     base = os.path.join("deliveries", run_id, "to_immunogen")
@@ -156,6 +206,16 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float):
     if len(alleles) == 0:
         raise ValueError("没有可用的 HLA 等位基因，请检查 hla_typing.json 格式。")
 
+    # 供 NetMHCIIpan：去重后的、长度 9–14 且会进入 I 类预测的肽（与下循环条件一致，略去 8 mer）
+    cands_mhc2 = []
+    for _, r in df.iterrows():
+        p0 = str(r.get("mut_peptide", "")).strip()
+        if 8 <= len(p0) <= 14 and len(p0) >= 9:
+            cands_mhc2.append(p0)
+    cands_mhc2 = list(dict.fromkeys(cands_mhc2))
+    mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(hla_json, cands_mhc2, mhc2_backend)
+    print(f"MHC-II 层: 模式={mhc2_mode}，查表条目数={len(mhc2_lookup) if mhc2_lookup else 0}")
+
     # 加载 MHCflurry MHC-I 亲和力模型
     predictor = Class1AffinityPredictor.load()
     rows = []
@@ -176,6 +236,17 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float):
         )
         # 逐行收集结果，保留原始输入中的关键字段
         for _, pr in pred.iterrows():
+            lu = mhc2_lookup.get(pep) if mhc2_lookup else None
+            if lu and lu.get("mhc2_source") == "netmhciipan" and lu.get("mhc2_el_rank") is not None:
+                m2s = mhc2_score_from_el_rank(lu["mhc2_el_rank"])
+                m2src = "netmhciipan"
+                m2el = lu.get("mhc2_el_rank")
+                m2ba = lu.get("mhc2_ba_nm")
+                m2a2 = lu.get("mhc2_allele", "")
+            else:
+                m2s = mhc2_proxy_score(pep, str(pr["allele"]))
+                m2src = "proxy"
+                m2el, m2ba, m2a2 = None, None, ""
             rows.append({
                 "mutation": row.get("mutation", ""),
                 "mut_peptide": pep,
@@ -183,7 +254,11 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float):
                 "variant_vaf": row.get("variant_vaf", ""),
                 "hla_allele": pr["allele"],
                 "affinity_nM": pr.get("affinity", None),
-                "mhc2_score": mhc2_proxy_score(pep, str(pr["allele"])),
+                "mhc2_score": m2s,
+                "mhc2_el_rank": m2el,
+                "mhc2_ba_nm": m2ba,
+                "mhc2_class2_allele": m2a2,
+                "mhc2_backend": m2src,
                 "deepimmuno_score": deepimmuno_proxy(pep),
                 "prime_score": prime_proxy(pep),
                 "repitope_score": repitope_proxy(pep),
@@ -195,6 +270,10 @@ def main(run_id: str, w1: float, w2: float, w3: float, w4: float):
         raise ValueError("没有得到预测结果，请检查肽长度、HLA 格式或输入内容。")
 
     out["affinity_nM"] = pd.to_numeric(out["affinity_nM"], errors="coerce")
+    if "mhc2_el_rank" in out.columns:
+        out["mhc2_el_rank"] = pd.to_numeric(out["mhc2_el_rank"], errors="coerce")
+    if "mhc2_ba_nm" in out.columns:
+        out["mhc2_ba_nm"] = pd.to_numeric(out["mhc2_ba_nm"], errors="coerce")
     out["variant_vaf"] = pd.to_numeric(out["variant_vaf"], errors="coerce").fillna(0.0)
     out["immunogenicity"] = (
         out["deepimmuno_score"] + out["prime_score"] + out["repitope_score"]
@@ -226,5 +305,11 @@ if __name__ == "__main__":
     parser.add_argument("--w2", type=float, default=0.25, help="immunogenicity 权重")
     parser.add_argument("--w3", type=float, default=0.15, help="VAF 权重")
     parser.add_argument("--w4", type=float, default=0.15, help="wt_dissimilarity 权重")
+    parser.add_argument(
+        "--mhc2_backend",
+        default="auto",
+        choices=["auto", "proxy", "netmhciipan"],
+        help="MHC-II 层: auto=有工具与 II 等位则 NetMHCIIpan 否则代理; proxy=仅代理; netmhciipan=强制（失败则报错）",
+    )
     args = parser.parse_args()
-    main(args.run_id, args.w1, args.w2, args.w3, args.w4)
+    main(args.run_id, args.w1, args.w2, args.w3, args.w4, mhc2_backend=args.mhc2_backend)

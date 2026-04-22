@@ -16,6 +16,8 @@
 import os
 import json
 import argparse
+from typing import Optional
+
 import pandas as pd
 
 
@@ -60,10 +62,20 @@ def write_positive_control(run_id: str, out_dir: str, selected: pd.DataFrame):
     print(f"完成: {path}")
 
 
-def write_self_check(run_id: str, out_dir: str, qc: dict):
+def write_self_check(
+    run_id: str, out_dir: str, qc: dict, ranking: Optional[pd.DataFrame] = None,
+):
     """双工具评分、阈值与已知局限的自证说明。"""
     mfe = qc.get("rnafold_mfe")
     rf_status = qc.get("rnafold_status", "unknown")
+    mhc2_note = "（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列：proxy=代理分，netmhciipan=实跑）"
+    mhc2_row = "MHC-II | **代理分**（未接 NetMHCIIpan 或无 II 类分型时） | 辅助排序的 II 类相关量纲分"
+    if ranking is not None and "mhc2_backend" in ranking.columns:
+        vc = ranking["mhc2_backend"].fillna("").astype(str).value_counts()
+        ssum = "，".join(f"{k}: {v}" for k, v in vc.items())
+        mhc2_note = f"本轮 MHC-II 行统计 {ssum}。{mhc2_note}"
+        if (ranking["mhc2_backend"] == "netmhciipan").any():
+            mhc2_row = "MHC-II | **NetMHCIIpan**（子进程，见 `netmhciipan_runner.py`；列 `mhc2_el_rank` / `mhc2_ba_nm`） | 真实 II 类预测时 EL %Rank 等；仍须声明工具版本与等位基因写法"
     path = os.path.join(out_dir, "SELF_CHECK.md")
     content = f"""# Self Check（{run_id}）
 
@@ -72,7 +84,10 @@ def write_self_check(run_id: str, out_dir: str, qc: dict):
 | 环节 | 工具或实现 | 用途 |
 |------|----------------|------|
 | MHC-I 亲和力 | **MHCflurry**（`Class1AffinityPredictor`） | 肽–HLA-I 结合强度排序 |
+| {mhc2_row} |
 | mRNA 二级结构 / MFE | **ViennaRNA**（优先 `RNAfold` 命令，否则 Python `RNA` 绑定） | MFE 与 dot-bracket，用于质控图与 `mrna_design.json` |
+
+- {mhc2_note}
 
 ## 2. 关键阈值与过滤（当前默认）
 
@@ -89,7 +104,7 @@ def write_self_check(run_id: str, out_dir: str, qc: dict):
 
 ## 4. 已知局限（须在汇报中声明）
 
-1. **MHC-II**：当前为代理分或占位接口；真实生产应接 **NetMHCIIpan** 等工具。
+1. **MHC-II**：可通过 `--mhc2_backend` 与 `NETMHCIIPAN_BIN` 等环境变量接 **NetMHCIIpan**；未配置或无可转换的 II 类分型时行内为 **proxy**。
 2. **免疫原性（DeepImmuno / PRIME / Repitope）**：当前为可复现代理分；真实模型需单独部署与校准。
 3. **NetMHCpan / BigMHC**：未作为默认第二路 MHC-I；可在 `SELF_CHECK` 后续版本中补充交叉验证表。
 4. **SimHub 初始结构**：当前 `complex.pdb` 为**粗粒度**多链占位，**必须**替换为 AlphaFold-Multimer / PANDORA 等生成的真实复合物。
@@ -113,8 +128,10 @@ def main(run_id: str):
 
     selected = pd.read_csv(selected_path)
     qc = load_json(os.path.join(out_dir, "qc_metrics.json"))
+    rank_path = os.path.join(out_dir, "peptide_mhc_ranking.csv")
+    ranking = pd.read_csv(rank_path) if os.path.exists(rank_path) else None
     write_positive_control(run_id, out_dir, selected)
-    write_self_check(run_id, out_dir, qc)
+    write_self_check(run_id, out_dir, qc, ranking=ranking)
 
 
 if __name__ == "__main__":

@@ -20,10 +20,10 @@
 | :---: | --- |
 | [x] | 在 `hla_typing.json` 契约中明确 **II 类等位基因**（`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`）及与 OptiType/HLA-HD 的字段映射 → **`docs/hla_typing.md`** + `data/examples/hla_typing.class_ii.example.json` + `scripts/hla_typing_spec.py` + `validate_input.py` |
 | [x] | 维护 **等位基因名称映射表**（JSON，YAML 可用同结构）：BioDriver/契约 → NetMHCIIpan → `data/hla_allele_map_netmhciipan.json` + `scripts/hla_allele_to_netmhciipan.py`；白话说明 **`docs/allele_naming_simple.md`**，契约仍见 **`docs/hla_typing.md`** |
-| [ ] | 实现 **NetMHCIIpan 调用层**（推荐 Linux/WSL2/Docker + `subprocess`；Windows 本机需约定路径或容器） |
-| [ ] | 批处理输入：候选肽列表；解析输出（xls/stdout），合并入 `peptide_mhc_ranking.csv`（新列如 `mhc2_affinity` / `mhc2_pct_rank`） |
-| [ ] | 在 `predict_mhc_ranking.py` 增加 `--mhc2_backend netmhciipan|proxy`，缺失工具时 **回退** 现有 `mhc2_proxy_score` |
-| [ ] | 更新 `SELF_CHECK.md` 生成逻辑：记录 NetMHCIIpan 版本、命令行、阈值；`REPORT.md` 中注明 II 类预测局限 |
+| [x] | 实现 **NetMHCIIpan 调用层** → `scripts/netmhciipan_runner.py`（`subprocess`，环境变量见 `docs/netmhciipan_setup.md`） |
+| [x] | 批处理：同一次调用写入肽列表、`-a` 多个等位基因；**stdout 表**解析后并入 `peptide_mhc_ranking.csv`（`mhc2_el_rank` / `mhc2_ba_nm` 等；EL %Rank 优于 IC50 时以 rank 主转 `mhc2_score`） |
+| [x] | `predict_mhc_ranking.py` / `run_all.py`：`--mhc2_backend auto|proxy|netmhciipan`；**auto** 在缺可执行/无 II 类时回退 `mhc2_proxy_score` |
+| [x] | `prepare_self_certification.py` 根据 `mhc2_backend` 列更新 **SELF_CHECK** 中 MHC-II 说明；版本/命令以环境为准，见 `netmhciipan_setup.md` |
 
 **相关代码：** `scripts/predict_mhc_ranking.py` 中 `mhc2_proxy_score()`。
 
