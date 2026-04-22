@@ -115,3 +115,4 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
 
 - `FINAL_CHECKLIST.md` — 交付前自检
 - `RELEASE_NOTES.md` — 版本与里程碑
+- `docs/TODO.md` — **后续完善清单**（NetMHCIIpan、免疫原性真工具、AF/PANDORA、信号肽/LNP 等）
