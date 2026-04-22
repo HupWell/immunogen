@@ -86,6 +86,7 @@ python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasib
 
 ```bash
 python scripts/validate_input.py --run_id R001
+python scripts/export_immuno_template.py --run_id R001
 python scripts/run_immunogenicity_adapters.py --run_id R001 --backend_deepimmuno auto --backend_prime auto --backend_repitope auto
 python scripts/predict_mhc_ranking.py --run_id R001 --wi_deepimmuno 1 --wi_prime 1 --wi_repitope 1
 python scripts/select_top_peptides.py --run_id R001 --top_n 10 --min_dissimilarity 0.1
@@ -110,6 +111,8 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
 ## 6. 公开数据基准
 
 - `data/public/`：pVACtools 示例 TSV + 文献案例合并流程见 `scripts/merge_public_sources.py`、`scripts/prepare_public_dataset.py`。
+- 免疫原性公开对照数据（DeepImmuno）已纳入：`data/public/immunogenicity/deepimmuno/`，可用 `scripts/import_public_deepimmuno_scores.py` 映射到 `results/<run_id>/tool_outputs/raw/deepimmuno.tsv`。
+- PRIME 公开对照数据（测试输出）已纳入：`data/public/immunogenicity/prime/`，可用 `scripts/import_public_prime_scores.py` 映射到 `results/<run_id>/tool_outputs/raw/prime.tsv`。
 - 推荐验证 `run_id`：`R_public_001`。
 
 ---
