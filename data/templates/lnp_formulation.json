@@ -1,0 +1,25 @@
+{
+  "version": "0.1",
+  "stage": "template_only",
+  "note": "LNP 配方模板，当前不参与序列流水线计算。",
+  "lipids": {
+    "ionizable_lipid": "",
+    "helper_lipid": "",
+    "cholesterol": "",
+    "peg_lipid": ""
+  },
+  "ratios_molar_percent": {
+    "ionizable_lipid": null,
+    "helper_lipid": null,
+    "cholesterol": null,
+    "peg_lipid": null
+  },
+  "process": {
+    "np_ratio": null,
+    "target_particle_size_nm": null,
+    "buffer": "",
+    "mixing_method": ""
+  },
+  "references": []
+}
+

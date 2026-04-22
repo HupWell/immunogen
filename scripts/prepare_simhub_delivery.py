@@ -20,6 +20,35 @@ import pandas as pd
 import numpy as np
 
 
+def normalize_chain_ids_for_contract(pdb_text: str) -> tuple[str, dict]:
+    """
+    将输入 PDB 的前三个链统一重映射为 M/B/P。
+    仅处理 ATOM/HETATM 行；其余行原样保留。
+    """
+    target = ["M", "B", "P"]
+    seen = []
+    lines_out = []
+    mapping = {}
+    for raw in pdb_text.splitlines():
+        if raw.startswith("ATOM") or raw.startswith("HETATM"):
+            line = raw
+            if len(line) < 22:
+                line = line.ljust(22)
+            chain = line[21].strip() or "_"
+            if chain not in seen:
+                seen.append(chain)
+            if chain in seen[:3]:
+                new_chain = target[seen.index(chain)]
+                mapping[chain] = new_chain
+                line = f"{line[:21]}{new_chain}{line[22:]}"
+            lines_out.append(line)
+        else:
+            lines_out.append(raw)
+    if lines_out and lines_out[-1].strip() != "END":
+        lines_out.append("END")
+    return "\n".join(lines_out) + "\n", mapping
+
+
 def load_case_id(meta_file: str, run_id: str) -> str:
     """优先从 meta.json 读取 case_id，缺失时回退为 run_id。"""
     if not os.path.exists(meta_file):
@@ -108,7 +137,7 @@ def pick_hla_allele(md_row: pd.Series, hla_json_path: str) -> str:
     return "HLA-A*02:01"
 
 
-def main(run_id: str, top_k: int):
+def main(run_id: str, top_k: int, structure_backend: str, structure_input_pdb: str):
     selected_file = os.path.join("results", run_id, "selected_peptides.csv")
     input_meta_file = os.path.join("deliveries", run_id, "to_immunogen", "meta.json")
     hla_file = os.path.join("deliveries", run_id, "to_immunogen", "hla_typing.json")
@@ -134,7 +163,24 @@ def main(run_id: str, top_k: int):
 
     top_row = md_df.iloc[0]
     top_peptide = str(top_row.get("mut_peptide", "AAAAAAAAA")).strip().upper()
-    write_complex_pdb(complex_pdb, top_peptide[:15] if top_peptide else "AAAAAAAAA")
+    backend = structure_backend.strip().lower()
+    chain_map = {}
+    if backend == "coarse":
+        write_complex_pdb(complex_pdb, top_peptide[:15] if top_peptide else "AAAAAAAAA")
+        chain_map = {"M": "M", "B": "B", "P": "P"}
+    elif backend in ("pandora", "afm"):
+        if not structure_input_pdb.strip():
+            raise ValueError("structure_backend 为 pandora/afm 时，必须提供 --structure_input_pdb。")
+        src = structure_input_pdb.strip()
+        if not os.path.exists(src):
+            raise FileNotFoundError(f"未找到结构文件: {src}")
+        with open(src, "r", encoding="utf-8", errors="ignore") as f:
+            pdb_text = f.read()
+        normalized, chain_map = normalize_chain_ids_for_contract(pdb_text)
+        with open(complex_pdb, "w", encoding="utf-8") as f:
+            f.write(normalized)
+    else:
+        raise ValueError("structure_backend 仅支持 coarse/pandora/afm。")
 
     allele = pick_hla_allele(top_row, hla_file)
     with open(hla_txt, "w", encoding="utf-8") as f:
@@ -144,12 +190,17 @@ def main(run_id: str, top_k: int):
         "run_id": run_id,
         "case_id": case_id,
         "molecule_type": "peptide_mhc",
-        "delivery_stage": "coarse_initial_complex",
+        "delivery_stage": "coarse_initial_complex" if backend == "coarse" else "model_initial_complex",
+        "structure_backend": backend,
+        "structure_source": "generated_in_script" if backend == "coarse" else structure_input_pdb,
+        "structure_tool_version": "na_for_coarse" if backend == "coarse" else "provided_by_user",
+        "replaces_coarse": backend in ("pandora", "afm"),
+        "chain_id_contract": {"target": ["M", "B", "P"], "mapping_applied": chain_map},
         "contract": "SimHub peptide_mhc branch B: complex.pdb + meta.json + optional hla_allele.txt; no SDF",
         "top_k_for_md": int(top_k),
         "selected_for_md_file": "selected_for_md.csv",
         "notes": [
-            "complex.pdb 为粗粒度 M/B/P 三链 CA 初始构象，仅用于流程联通与接口验收。",
+            "complex.pdb 为粗粒度 M/B/P 三链 CA 初始构象，仅用于流程联通与接口验收。" if backend == "coarse" else "complex.pdb 来自外部结构工具输入（用户提供）。",
             "禁止使用 SDF + AM1-BCC 处理多肽；多肽须保留氨基酸残基拓扑，走 AMBER14SB 蛋白力场。",
             "生产环境请用 AlphaFold-Multimer 或 PANDORA 生成高精度 complex.pdb 后再送 MD。"
         ]
@@ -176,5 +227,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_id", required=True, help="例如 R001")
     parser.add_argument("--top_k", type=int, default=3, help="用于 MD 验证的 Top 候选数量，默认 3")
+    parser.add_argument(
+        "--structure_backend",
+        default="coarse",
+        choices=["coarse", "pandora", "afm"],
+        help="结构来源：coarse(默认)/pandora/afm",
+    )
+    parser.add_argument(
+        "--structure_input_pdb",
+        default="",
+        help="structure_backend 为 pandora/afm 时，提供外部 PDB 路径。",
+    )
     args = parser.parse_args()
-    main(args.run_id, args.top_k)
+    main(args.run_id, args.top_k, args.structure_backend, args.structure_input_pdb)

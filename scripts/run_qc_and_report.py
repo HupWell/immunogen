@@ -174,6 +174,8 @@ def write_report(
 - 总长度：`{full_length}`
 - GC 含量：`{gc_percent}%`
 - linker：`{design.get("linker", "NA")}`
+- signal_peptide：`{design.get("signal_peptide_source", "none")}` / `len={len(str(design.get("signal_peptide_aa", "")))}`
+- tm_domain：`{design.get("tm_domain_source", "none")}` / `len={len(str(design.get("tm_domain_aa", "")))}`
 - 修饰策略说明：`{design.get("modification_strategy", "NA")}`
 
 ## 3. Top 候选肽（最多展示前 10 条）
@@ -195,7 +197,13 @@ def write_report(
 - 当前为 MVP 版本，已经可复现跑通“预测 -> 筛选 -> 构建 -> 报告”主流程。
 - `affinity_nM` 若为空，通常由示例数据或等位基因覆盖范围导致，建议换真实病例数据复核。
 - 当前已输出真实热图；RNAfold 若可用会写入 MFE，否则使用回退 profile 图。
+- 信号肽/TM 可选项为工程接口，具体序列应由实验方案确定（本报告仅记录参数与长度）。
 - 基础质控 JSON：`{os.path.basename(qc_file)}`
+
+## 6. 信号肽与表达定位（简述）
+- 如启用 N 端信号肽，常见目的是促进分泌/加工路径，提高抗原递呈机会；最终方案需结合实验体系验证。
+- 如启用 C 端 TM，常用于增强膜定位或改变加工路径；是否采用以实验设计与安全性评估为准。
+- 本流程只记录“是否启用 + 使用何种序列来源（preset/manual）”，不对免疫学效果做结论性承诺。
 """
     with open(report_file, "w", encoding="utf-8") as f:
         f.write(content)

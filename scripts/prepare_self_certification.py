@@ -127,9 +127,22 @@ def write_self_check(
 4. **SimHub 初始结构**：当前 `complex.pdb` 为**粗粒度**多链占位，**必须**替换为 AlphaFold-Multimer / PANDORA 等生成的真实复合物。
 5. **肽–MHC 分支禁止使用 SDF + 小分子电荷模型**；本仓库 SimHub 交付已按契约仅输出 `complex.pdb` + `meta.json` + 可选 `hla_allele.txt`。
 
+## 4.1 结构后端策略（当前建议）
+
+- 默认交付链路保持 `coarse`，用于保证无外部依赖时也可跑通全流程。
+- 真实结构建议采用“**PANDORA 批量 + AFM 重点复核**”组合策略（见 `docs/structure_backend_selection.md`）。
+- 若使用 AFM，建议独立任务执行并回填 PDB，避免阻塞主流水线。
+
 ## 5. 与任务书对齐
 
 - 先完成本目录下 **POSITIVE_CONTROL.md**、**SELF_CHECK.md** 与 **REPORT.md**，再提交 Simulation Hub 交付包（见 `deliveries/<run_id>/to_simhub/`）。
+
+## 6. IEDB 资源（人工复核入口）
+
+- MHC-I 结合预测工具入口：https://tools.iedb.org/mhci/
+- MHC-II 结合预测工具入口：https://tools.iedb.org/mhcii/
+- IEDB 主站（文献与实验数据）：https://www.iedb.org/
+- 说明：本仓库当前不强制自动调用 IEDB，建议将本流程 Top 肽段导出后做交叉复核。
 """
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)

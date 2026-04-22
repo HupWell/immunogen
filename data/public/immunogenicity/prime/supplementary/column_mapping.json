@@ -1,0 +1,10 @@
+{
+  "description": "把 PRIME 补充表里真实列名映射到 peptide/score。复制本文件为 column_mapping.json 后生效。",
+  "mappings": [
+    {
+      "file": "TableS4.csv",
+      "peptide_col": "Peptide",
+      "score_col": "PRIME_score"
+    }
+  ]
+}

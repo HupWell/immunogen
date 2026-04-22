@@ -18,10 +18,10 @@
 import os
 import json
 import argparse
+import subprocess
 from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
-from mhcflurry import Class1AffinityPredictor
 import numpy as np
 
 from netmhciipan_runner import (
@@ -151,6 +151,137 @@ def load_precomputed_immunogenicity(run_id: str) -> Dict[str, Dict[str, float]]:
     return merged
 
 
+def _cmd_input_pairs(df: pd.DataFrame, alleles: list) -> pd.DataFrame:
+    """生成交叉验证工具可复用的输入对：mut_peptide × hla_allele。"""
+    peps = []
+    for _, r in df.iterrows():
+        p = str(r.get("mut_peptide", "")).strip().upper()
+        if 8 <= len(p) <= 14:
+            peps.append(p)
+    peps = list(dict.fromkeys(peps))
+    rows = []
+    for p in peps:
+        for a in alleles:
+            rows.append({"mut_peptide": p, "hla_allele": a})
+    return pd.DataFrame(rows)
+
+
+def _tool_raw_tsv(run_id: str, tool: str) -> str:
+    base = os.path.join("results", run_id, "tool_outputs", "raw")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, f"{tool}.tsv")
+
+
+def _normalize_mhc1_cv_table(tool: str, raw_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    统一交叉验证表格式：
+    - 必须有 mut_peptide
+    - hla_allele 可选（缺失时按 peptide 级匹配）
+    """
+    if "mut_peptide" not in raw_df.columns:
+        raise ValueError(f"{tool} 结果缺少 mut_peptide 列。")
+    out = pd.DataFrame()
+    out["mut_peptide"] = raw_df["mut_peptide"].astype(str).str.strip().str.upper()
+    if "hla_allele" in raw_df.columns:
+        out["hla_allele"] = raw_df["hla_allele"].astype(str).str.strip()
+    else:
+        out["hla_allele"] = ""
+
+    if tool == "mhc1_netmhcpan":
+        cands = ["mhc1_cv_netmhcpan_nM", "affinity_nM", "affinity", "ic50", "score"]
+        metric_col = next((c for c in cands if c in raw_df.columns), None)
+        if metric_col is None:
+            raise ValueError("mhc1_netmhcpan 结果缺少亲和力列（affinity_nM/affinity/ic50/score）。")
+        out["mhc1_cv_netmhcpan_nM"] = pd.to_numeric(raw_df[metric_col], errors="coerce")
+    elif tool == "mhc1_bigmhc":
+        cands = ["mhc1_cv_bigmhc_score", "bigmhc_score", "presentation_score", "score"]
+        metric_col = next((c for c in cands if c in raw_df.columns), None)
+        if metric_col is None:
+            raise ValueError("mhc1_bigmhc 结果缺少分值列（bigmhc_score/presentation_score/score）。")
+        out["mhc1_cv_bigmhc_score"] = pd.to_numeric(raw_df[metric_col], errors="coerce")
+    else:
+        raise ValueError(f"未知交叉验证工具: {tool}")
+    out = out[out["mut_peptide"] != ""].copy()
+    return out
+
+
+def _run_mhc1_cv_cmd(tool: str, run_id: str, input_pairs: pd.DataFrame) -> pd.DataFrame:
+    """按环境变量命令模板调用外部工具并读取结果 TSV。"""
+    env_key = "MHC1_NETMHCPAN_CMD" if tool == "mhc1_netmhcpan" else "MHC1_BIGMHC_CMD"
+    cmd_tpl = os.environ.get(env_key, "").strip()
+    if not cmd_tpl:
+        raise RuntimeError(f"未设置环境变量 {env_key}")
+    tmp_in = _tool_raw_tsv(run_id, f"{tool}_input")
+    tmp_out = _tool_raw_tsv(run_id, tool)
+    input_pairs.to_csv(tmp_in, sep="\t", index=False, encoding="utf-8")
+    cmd = cmd_tpl.format(input_tsv=tmp_in, output_tsv=tmp_out, run_id=run_id)
+    ret = subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
+    if ret.returncode != 0:
+        stderr = (ret.stderr or "").strip()
+        raise RuntimeError(f"{tool} real_cmd 执行失败: {stderr}")
+    if not os.path.exists(tmp_out):
+        raise FileNotFoundError(tmp_out)
+    rdf = pd.read_csv(tmp_out, sep="\t")
+    return _normalize_mhc1_cv_table(tool, rdf)
+
+
+def _load_mhc1_cv_with_backend(tool: str, run_id: str, backend: str, input_pairs: pd.DataFrame) -> Tuple[pd.DataFrame, str]:
+    """
+    返回：标准化表 + 实际来源（real_tsv/real_cmd/proxy）
+    注：此处 proxy 表示“未接入真实工具，仅占位”，不会影响主排序。
+    """
+    b = backend.strip().lower()
+    if b not in ("auto", "real_tsv", "real_cmd", "off"):
+        raise ValueError(f"{tool} backend 非法: {backend}")
+    tsv_path = _tool_raw_tsv(run_id, tool)
+    if b == "off":
+        return pd.DataFrame(), "off"
+    if b in ("auto", "real_tsv"):
+        if os.path.exists(tsv_path):
+            try:
+                df = pd.read_csv(tsv_path, sep="\t")
+                return _normalize_mhc1_cv_table(tool, df), "real_tsv"
+            except Exception as e:
+                if b == "real_tsv":
+                    raise
+                print(f"{tool} auto: real_tsv 不可用，回退。原因: {e}")
+        elif b == "real_tsv":
+            raise FileNotFoundError(tsv_path)
+    if b in ("auto", "real_cmd"):
+        try:
+            return _run_mhc1_cv_cmd(tool, run_id, input_pairs), "real_cmd"
+        except Exception as e:
+            if b == "real_cmd":
+                raise
+            print(f"{tool} auto: real_cmd 不可用，回退。原因: {e}")
+    return pd.DataFrame(), "off"
+
+
+def _build_cv_lookup(cv_df: pd.DataFrame, metric_col: str) -> Tuple[Dict[Tuple[str, str], float], Dict[str, float]]:
+    """构建 (peptide, allele) 与 peptide 级别的双层查表。"""
+    pair_lookup: Dict[Tuple[str, str], float] = {}
+    pep_lookup: Dict[str, float] = {}
+    if cv_df.empty or metric_col not in cv_df.columns:
+        return pair_lookup, pep_lookup
+    for _, r in cv_df.iterrows():
+        pep = str(r.get("mut_peptide", "")).strip().upper()
+        alle = str(r.get("hla_allele", "")).strip()
+        val = pd.to_numeric(r.get(metric_col), errors="coerce")
+        if not pep or pd.isna(val):
+            continue
+        if alle:
+            pair_lookup[(pep, alle)] = float(val)
+        # peptide 级别记录取最优值：NetMHCpan nM 越低越好，BigMHC score 越高越好
+        if pep not in pep_lookup:
+            pep_lookup[pep] = float(val)
+        else:
+            if metric_col.endswith("_nM"):
+                pep_lookup[pep] = min(pep_lookup[pep], float(val))
+            else:
+                pep_lookup[pep] = max(pep_lookup[pep], float(val))
+    return pair_lookup, pep_lookup
+
+
 def _prepare_mhc2_lookup(
     hla_json: dict,
     candidate_peptides: list,
@@ -195,6 +326,8 @@ def main(
     wi_deepimmuno: float = 1.0,
     wi_prime: float = 1.0,
     wi_repitope: float = 1.0,
+    backend_mhc1_netmhcpan: str = "auto",
+    backend_mhc1_bigmhc: str = "auto",
 ):
     """
     主流程：
@@ -204,6 +337,13 @@ def main(
     4) 可选：NetMHCIIpan 对 II 类（见 --mhc2_backend）；
     5) 按亲和力生成初版 rank_score 并输出 CSV。
     """
+    try:
+        from mhcflurry import Class1AffinityPredictor
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            "未安装 mhcflurry，请先安装并执行 mhcflurry-downloads fetch 后再运行预测。"
+        ) from e
+
     # 根据 run_id 拼接输入目录与输出目录
     base = os.path.join("deliveries", run_id, "to_immunogen")
     out_dir = os.path.join("results", run_id)
@@ -240,6 +380,23 @@ def main(
     print(f"MHC-II 层: 模式={mhc2_mode}，查表条目数={len(mhc2_lookup) if mhc2_lookup else 0}")
     precomputed_immuno = load_precomputed_immunogenicity(run_id)
     print(f"免疫原性预计算表: 命中肽数={len(precomputed_immuno)}（缺失时自动回退 proxy）")
+    cv_input = _cmd_input_pairs(df, alleles)
+    cv_netmhcpan_df, cv_netmhcpan_src = _load_mhc1_cv_with_backend(
+        tool="mhc1_netmhcpan",
+        run_id=run_id,
+        backend=backend_mhc1_netmhcpan,
+        input_pairs=cv_input,
+    )
+    cv_bigmhc_df, cv_bigmhc_src = _load_mhc1_cv_with_backend(
+        tool="mhc1_bigmhc",
+        run_id=run_id,
+        backend=backend_mhc1_bigmhc,
+        input_pairs=cv_input,
+    )
+    n_pair, n_pep = _build_cv_lookup(cv_netmhcpan_df, "mhc1_cv_netmhcpan_nM")
+    b_pair, b_pep = _build_cv_lookup(cv_bigmhc_df, "mhc1_cv_bigmhc_score")
+    print(f"MHC-I 交叉验证 NetMHCpan: source={cv_netmhcpan_src}, rows={len(cv_netmhcpan_df)}")
+    print(f"MHC-I 交叉验证 BigMHC: source={cv_bigmhc_src}, rows={len(cv_bigmhc_df)}")
 
     # 加载 MHCflurry MHC-I 亲和力模型
     predictor = Class1AffinityPredictor.load()
@@ -261,6 +418,9 @@ def main(
         )
         # 逐行收集结果，保留原始输入中的关键字段
         for _, pr in pred.iterrows():
+            key = (pep.upper(), str(pr["allele"]))
+            cv_n = n_pair.get(key, n_pep.get(pep.upper()))
+            cv_b = b_pair.get(key, b_pep.get(pep.upper()))
             lu = mhc2_lookup.get(pep) if mhc2_lookup else None
             if lu and lu.get("mhc2_source") == "netmhciipan" and lu.get("mhc2_el_rank") is not None:
                 m2s = mhc2_score_from_el_rank(lu["mhc2_el_rank"])
@@ -286,6 +446,10 @@ def main(
                 "variant_vaf": row.get("variant_vaf", ""),
                 "hla_allele": pr["allele"],
                 "affinity_nM": pr.get("affinity", None),
+                "mhc1_cv_netmhcpan_nM": cv_n,
+                "mhc1_cv_bigmhc_score": cv_b,
+                "mhc1_cv_source_netmhcpan": cv_netmhcpan_src,
+                "mhc1_cv_source_bigmhc": cv_bigmhc_src,
                 "mhc2_score": m2s,
                 "mhc2_el_rank": m2el,
                 "mhc2_ba_nm": m2ba,
@@ -310,6 +474,8 @@ def main(
         raise ValueError("没有得到预测结果，请检查肽长度、HLA 格式或输入内容。")
 
     out["affinity_nM"] = pd.to_numeric(out["affinity_nM"], errors="coerce")
+    out["mhc1_cv_netmhcpan_nM"] = pd.to_numeric(out["mhc1_cv_netmhcpan_nM"], errors="coerce")
+    out["mhc1_cv_bigmhc_score"] = pd.to_numeric(out["mhc1_cv_bigmhc_score"], errors="coerce")
     if "mhc2_el_rank" in out.columns:
         out["mhc2_el_rank"] = pd.to_numeric(out["mhc2_el_rank"], errors="coerce")
     if "mhc2_ba_nm" in out.columns:
@@ -359,6 +525,18 @@ if __name__ == "__main__":
         choices=["auto", "proxy", "netmhciipan"],
         help="MHC-II 层: auto=有工具与 II 等位则 NetMHCIIpan 否则代理; proxy=仅代理; netmhciipan=强制（失败则报错）",
     )
+    parser.add_argument(
+        "--backend_mhc1_netmhcpan",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "off"],
+        help="MHC-I 交叉验证 NetMHCpan 后端：auto/real_tsv/real_cmd/off",
+    )
+    parser.add_argument(
+        "--backend_mhc1_bigmhc",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "off"],
+        help="MHC-I 交叉验证 BigMHC 后端：auto/real_tsv/real_cmd/off",
+    )
     args = parser.parse_args()
     main(
         args.run_id,
@@ -370,4 +548,6 @@ if __name__ == "__main__":
         wi_deepimmuno=args.wi_deepimmuno,
         wi_prime=args.wi_prime,
         wi_repitope=args.wi_repitope,
+        backend_mhc1_netmhcpan=args.backend_mhc1_netmhcpan,
+        backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
     )

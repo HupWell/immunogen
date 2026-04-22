@@ -7,6 +7,7 @@
 2) data/public/immunogenicity/prime/supplementary/*.csv（可选，用户后续手工放置）
 """
 import argparse
+import json
 import os
 from typing import Dict, List
 
@@ -18,6 +19,7 @@ from immunogenicity_adapters import ensure_tool_output_dir, load_unique_peptides
 PRIME_DIR = os.path.join("data", "public", "immunogenicity", "prime")
 OUT_COMPARE = os.path.join(PRIME_DIR, "out_compare.txt")
 SUPP_DIR = os.path.join(PRIME_DIR, "supplementary")
+MAPPING_FILE = os.path.join(SUPP_DIR, "column_mapping.json")
 
 
 def _collect_from_out_compare(score_map: Dict[str, List[float]]):
@@ -81,10 +83,50 @@ def _collect_from_supp_csv(score_map: Dict[str, List[float]]):
             score_map.setdefault(r["mut_peptide"], []).append(float(r["score"]))
 
 
+def _collect_from_mapping(score_map: Dict[str, List[float]], mapping_path: str):
+    """
+    按显式映射配置导入 supplementary CSV。
+    配置示例见 data/public/immunogenicity/prime/supplementary/column_mapping.template.json
+    """
+    if not os.path.exists(mapping_path):
+        return
+    with open(mapping_path, "r", encoding="utf-8") as f:
+        conf = json.load(f)
+    items = conf.get("mappings", [])
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        rel_file = str(item.get("file", "")).strip()
+        pep_col = str(item.get("peptide_col", "")).strip()
+        score_col = str(item.get("score_col", "")).strip()
+        if not rel_file or not pep_col or not score_col:
+            continue
+        path = os.path.join(SUPP_DIR, rel_file)
+        if not os.path.exists(path):
+            continue
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            continue
+        if pep_col not in df.columns or score_col not in df.columns:
+            continue
+        tmp = pd.DataFrame(
+            {
+                "mut_peptide": df[pep_col].astype(str).str.strip().str.upper(),
+                "score": pd.to_numeric(df[score_col], errors="coerce"),
+            }
+        ).dropna(subset=["mut_peptide", "score"])
+        for _, r in tmp.iterrows():
+            score_map.setdefault(r["mut_peptide"], []).append(float(r["score"]))
+
+
 def main(run_id: str):
     peptides = load_unique_peptides(run_id).tolist()
     score_map: Dict[str, List[float]] = {}
     _collect_from_out_compare(score_map)
+    _collect_from_mapping(score_map, MAPPING_FILE)
     _collect_from_supp_csv(score_map)
 
     rows = []

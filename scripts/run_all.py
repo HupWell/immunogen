@@ -33,12 +33,23 @@ def main(
     linker: str,
     poly_a_len: int,
     codon_mode: str,
+    signal_peptide_preset: str,
+    signal_peptide_aa: str,
+    tm_domain_preset: str,
+    tm_domain_aa: str,
     top_k_md: int,
+    prepare_structure_inputs: bool,
+    structure_seq_refresh_remote: bool,
+    structure_seq_strict: bool,
+    structure_backend: str,
+    structure_input_pdb: str,
     feasibility_top_n: int,
     mhc2_backend: str,
     wi_deepimmuno: float,
     wi_prime: float,
     wi_repitope: float,
+    backend_mhc1_netmhcpan: str,
+    backend_mhc1_bigmhc: str,
     backend_deepimmuno: str,
     backend_prime: str,
     backend_repitope: str,
@@ -78,6 +89,10 @@ def main(
         str(wi_prime),
         "--wi_repitope",
         str(wi_repitope),
+        "--backend_mhc1_netmhcpan",
+        backend_mhc1_netmhcpan,
+        "--backend_mhc1_bigmhc",
+        backend_mhc1_bigmhc,
     ]
     step4 = [
         python_exe,
@@ -100,6 +115,14 @@ def main(
         str(poly_a_len),
         "--codon_mode",
         codon_mode,
+        "--signal_peptide_preset",
+        signal_peptide_preset,
+        "--signal_peptide_aa",
+        signal_peptide_aa,
+        "--tm_domain_preset",
+        tm_domain_preset,
+        "--tm_domain_aa",
+        tm_domain_aa,
     ]
     step6 = [
         python_exe,
@@ -120,7 +143,21 @@ def main(
         run_id,
         "--top_k",
         str(top_k_md),
+        "--structure_backend",
+        structure_backend,
+        "--structure_input_pdb",
+        structure_input_pdb,
     ]
+    step8_1 = [
+        python_exe,
+        os.path.join(scripts_dir, "prepare_mhc_chain_sequences.py"),
+        "--run_id",
+        run_id,
+    ]
+    if structure_seq_refresh_remote:
+        step8_1.append("--refresh_remote")
+    if structure_seq_strict:
+        step8_1.append("--strict")
     step9 = [
         python_exe,
         os.path.join(scripts_dir, "validate_feasibility.py"),
@@ -138,6 +175,8 @@ def main(
     run_step(step5)
     run_step(step6)
     run_step(step7)
+    if prepare_structure_inputs:
+        run_step(step8_1)
     run_step(step8)
     run_step(step9)
     print("\n全部步骤执行完成。")
@@ -161,7 +200,25 @@ if __name__ == "__main__":
         choices=["basic", "optimized", "lineardesign"],
         help="密码子模式，默认 optimized",
     )
+    parser.add_argument("--signal_peptide_preset", default="", choices=["", "igkv", "mitd"], help="N端信号肽预设")
+    parser.add_argument("--signal_peptide_aa", default="", help="N端信号肽手工AA")
+    parser.add_argument("--tm_domain_preset", default="", choices=["", "cd8a_tm"], help="C端TM预设")
+    parser.add_argument("--tm_domain_aa", default="", help="C端TM手工AA")
     parser.add_argument("--top_k_md", type=int, default=3, help="提交 SimHub 的 Top K，默认 3")
+    parser.add_argument(
+        "--prepare_structure_inputs",
+        action="store_true",
+        help="生成结构建模输入序列（MHC-I alpha + b2m），输出到 results/<run_id>/structure_inputs/",
+    )
+    parser.add_argument("--structure_seq_refresh_remote", action="store_true", help="刷新 IPD/UniProt 远程序列缓存")
+    parser.add_argument("--structure_seq_strict", action="store_true", help="拉取/匹配失败时中断流程")
+    parser.add_argument(
+        "--structure_backend",
+        default="coarse",
+        choices=["coarse", "pandora", "afm"],
+        help="SimHub 结构来源：coarse(默认)/pandora/afm",
+    )
+    parser.add_argument("--structure_input_pdb", default="", help="若 structure_backend 非 coarse，提供外部 PDB 路径")
     parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
     parser.add_argument(
         "--mhc2_backend",
@@ -172,6 +229,18 @@ if __name__ == "__main__":
     parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
     parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")
     parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
+    parser.add_argument(
+        "--backend_mhc1_netmhcpan",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "off"],
+        help="MHC-I 交叉验证 NetMHCpan 后端",
+    )
+    parser.add_argument(
+        "--backend_mhc1_bigmhc",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "off"],
+        help="MHC-I 交叉验证 BigMHC 后端",
+    )
     parser.add_argument(
         "--backend_deepimmuno",
         default="auto",
@@ -199,12 +268,23 @@ if __name__ == "__main__":
         linker=args.linker,
         poly_a_len=args.poly_a_len,
         codon_mode=args.codon_mode,
+        signal_peptide_preset=args.signal_peptide_preset,
+        signal_peptide_aa=args.signal_peptide_aa,
+        tm_domain_preset=args.tm_domain_preset,
+        tm_domain_aa=args.tm_domain_aa,
         top_k_md=args.top_k_md,
+        prepare_structure_inputs=args.prepare_structure_inputs,
+        structure_seq_refresh_remote=args.structure_seq_refresh_remote,
+        structure_seq_strict=args.structure_seq_strict,
+        structure_backend=args.structure_backend,
+        structure_input_pdb=args.structure_input_pdb,
         feasibility_top_n=args.feasibility_top_n,
         mhc2_backend=args.mhc2_backend,
         wi_deepimmuno=args.wi_deepimmuno,
         wi_prime=args.wi_prime,
         wi_repitope=args.wi_repitope,
+        backend_mhc1_netmhcpan=args.backend_mhc1_netmhcpan,
+        backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
         backend_deepimmuno=args.backend_deepimmuno,
         backend_prime=args.backend_prime,
         backend_repitope=args.backend_repitope,

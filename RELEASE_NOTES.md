@@ -1,5 +1,40 @@
 # ImmunoGen Release Notes
 
+## v0.3.0 - MHC-I 交叉验证列接入（NetMHCpan / BigMHC）
+
+- `predict_mhc_ranking.py` 新增 MHC-I 交叉验证后端参数：
+  - `--backend_mhc1_netmhcpan auto|real_tsv|real_cmd|off`
+  - `--backend_mhc1_bigmhc auto|real_tsv|real_cmd|off`
+- 排名表新增列：`mhc1_cv_netmhcpan_nM`、`mhc1_cv_bigmhc_score`、`mhc1_cv_source_netmhcpan`、`mhc1_cv_source_bigmhc`。
+- 默认 `auto` 不破坏主流程：找不到真实工具/结果时回退 `off`，保留 MHCflurry 主排序逻辑。
+- `run_all.py` 与 `README.md` 已同步新增参数与输入/输出说明。
+
+---
+
+## v0.2.9 - 结构后端选型文档落地
+
+- 新增 `docs/structure_backend_selection.md`，给出 PANDORA 与 ColabFold/AFM 的工程化对比与默认组合策略（PANDORA 批量 + AFM 重点复核）。
+- `prepare_self_certification.py` 的 `SELF_CHECK.md` 增加结构后端策略说明，便于汇报时统一口径。
+
+---
+
+## v0.2.8 - MHC-I α + β2m 序列数据管线
+
+- 新增 `scripts/prepare_mhc_chain_sequences.py`：按 `hla_typing.json` 自动选择 MHC-I 目标等位基因，并拉取/缓存 IPD-IMGT/HLA（A/B/C）蛋白序列与 UniProt β2m（P61769）。
+- 输出 `results/<run_id>/structure_inputs/mhc_chain_sequences.fasta` 与 `mhc_chain_sequences.json`，用于后续 PANDORA / AFM 结构建模输入。
+- `run_all.py` 新增可选参数：`--prepare_structure_inputs`、`--structure_seq_refresh_remote`、`--structure_seq_strict`。
+
+---
+
+## v0.2.7 - 结构后端接口 + 信号肽/TM 配置
+
+- `build_multivalent_mrna.py` / `run_all.py` 新增信号肽与 TM 可选参数，`mrna_design.json` 记录 `signal_peptide_aa`、`tm_domain_aa`、`multivalent_core_aa`。
+- `prepare_simhub_delivery.py` / `run_all.py` 新增 `--structure_backend coarse|pandora|afm` 与 `--structure_input_pdb`；`meta.json` 增加 `structure_source`、`structure_tool_version`、`replaces_coarse` 字段。
+- 新增 `docs/lnp_notes.md` 与 `data/templates/lnp_formulation.json`，将 LNP 说明与序列流水线解耦。
+- `run_qc_and_report.py` 的 `REPORT.md` 增补信号肽/TM 使用记录与简要免疫学说明。
+
+---
+
 ## v0.2.6 - 免疫原性真模型可选接入（安全回退）
 
 - `immunogenicity_adapters.py` 新增真实后端策略：`real_tsv` / `real_cmd` / `proxy`，`auto` 按 real→proxy 回退。

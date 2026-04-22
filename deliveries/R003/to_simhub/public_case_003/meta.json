@@ -3,6 +3,22 @@
   "case_id": "public_case_003",
   "molecule_type": "peptide_mhc",
   "delivery_stage": "coarse_initial_complex",
+  "structure_backend": "coarse",
+  "structure_source": "generated_in_script",
+  "structure_tool_version": "na_for_coarse",
+  "replaces_coarse": false,
+  "chain_id_contract": {
+    "target": [
+      "M",
+      "B",
+      "P"
+    ],
+    "mapping_applied": {
+      "M": "M",
+      "B": "B",
+      "P": "P"
+    }
+  },
   "contract": "SimHub peptide_mhc branch B: complex.pdb + meta.json + optional hla_allele.txt; no SDF",
   "top_k_for_md": 3,
   "selected_for_md_file": "selected_for_md.csv",

@@ -10,6 +10,18 @@ import argparse
 import subprocess
 import pandas as pd
 
+SIGNAL_PEPTIDE_PRESETS = {
+    # 常用分泌信号肽示例（教学/流程用途）
+    "igkv": "METDTLLLWVLLLWVPGSTG",
+    # 任务书提到 MITD，此处给出流程占位序列（生产请以实验方案为准）
+    "mitd": "MASSLAFLLLLLLQVSAA",
+}
+
+TM_DOMAIN_PRESETS = {
+    # 常见跨膜锚定占位（流程/接口用途）
+    "cd8a_tm": "LFWLFFPVVLTVD",
+}
+
 
 CODON_TABLE = {
     "A": "GCT", "R": "CGT", "N": "AAT", "D": "GAT", "C": "TGT",
@@ -114,7 +126,52 @@ def gc_content(seq: str) -> float:
     return (gc / len(seq)) * 100
 
 
-def main(run_id: str, linker: str, poly_a_len: int, codon_mode: str, lineardesign_bin: str):
+def resolve_optional_aa(
+    signal_peptide_preset: str,
+    signal_peptide_aa: str,
+    tm_domain_preset: str,
+    tm_domain_aa: str,
+):
+    """解析信号肽与 TM 来源（预设优先，其次手工 AA）。"""
+    sig_src = "none"
+    tm_src = "none"
+    sig = ""
+    tm = ""
+
+    if signal_peptide_preset:
+        key = signal_peptide_preset.strip().lower()
+        if key not in SIGNAL_PEPTIDE_PRESETS:
+            raise ValueError(f"未知 signal_peptide_preset: {signal_peptide_preset}")
+        sig = SIGNAL_PEPTIDE_PRESETS[key]
+        sig_src = f"preset:{key}"
+    elif signal_peptide_aa.strip():
+        sig = signal_peptide_aa.strip().upper()
+        sig_src = "manual"
+
+    if tm_domain_preset:
+        key = tm_domain_preset.strip().lower()
+        if key not in TM_DOMAIN_PRESETS:
+            raise ValueError(f"未知 tm_domain_preset: {tm_domain_preset}")
+        tm = TM_DOMAIN_PRESETS[key]
+        tm_src = f"preset:{key}"
+    elif tm_domain_aa.strip():
+        tm = tm_domain_aa.strip().upper()
+        tm_src = "manual"
+
+    return sig, sig_src, tm, tm_src
+
+
+def main(
+    run_id: str,
+    linker: str,
+    poly_a_len: int,
+    codon_mode: str,
+    lineardesign_bin: str,
+    signal_peptide_preset: str,
+    signal_peptide_aa: str,
+    tm_domain_preset: str,
+    tm_domain_aa: str,
+):
     """
     主流程：
     1) 读取 selected_peptides.csv；
@@ -144,8 +201,13 @@ def main(run_id: str, linker: str, poly_a_len: int, codon_mode: str, lineardesig
     if not peptides:
         raise ValueError("没有可用于构建 ORF 的肽段。")
 
-    # 构建多价 ORF（氨基酸）：Pep1 + linker + Pep2 + ...
-    orf_aa = linker.join(peptides)
+    # 构建多价核心 ORF：Pep1 + linker + Pep2 + ...
+    multivalent_core_aa = linker.join(peptides)
+    signal_aa, signal_src, tm_aa, tm_src = resolve_optional_aa(
+        signal_peptide_preset, signal_peptide_aa, tm_domain_preset, tm_domain_aa
+    )
+    # 最终 ORF：N端信号肽 + 多价核心 + C端可选TM
+    orf_aa = f"{signal_aa}{multivalent_core_aa}{tm_aa}"
     if codon_mode == "basic":
         orf_dna = aa_to_dna(orf_aa)
     elif codon_mode == "optimized":
@@ -177,6 +239,11 @@ def main(run_id: str, linker: str, poly_a_len: int, codon_mode: str, lineardesig
         "selected_peptide_count": len(peptides),
         "selected_peptides": peptides,
         "linker": linker,
+        "signal_peptide_aa": signal_aa,
+        "signal_peptide_source": signal_src,
+        "tm_domain_aa": tm_aa,
+        "tm_domain_source": tm_src,
+        "multivalent_core_aa": multivalent_core_aa,
         "codon_mode": codon_mode,
         "segments": {
             "utr5": {"sequence": utr5, "length": len(utr5)},
@@ -221,5 +288,37 @@ if __name__ == "__main__":
         default="",
         help="LinearDesign 可执行文件路径（codon_mode=lineardesign 时需要）",
     )
+    parser.add_argument(
+        "--signal_peptide_preset",
+        default="",
+        choices=["", "igkv", "mitd"],
+        help="N端信号肽预设（可选）：igkv/mitd",
+    )
+    parser.add_argument(
+        "--signal_peptide_aa",
+        default="",
+        help="N端信号肽手工氨基酸序列（与 preset 二选一）",
+    )
+    parser.add_argument(
+        "--tm_domain_preset",
+        default="",
+        choices=["", "cd8a_tm"],
+        help="C端TM预设（可选）：cd8a_tm",
+    )
+    parser.add_argument(
+        "--tm_domain_aa",
+        default="",
+        help="C端TM手工氨基酸序列（与 preset 二选一）",
+    )
     args = parser.parse_args()
-    main(args.run_id, args.linker, args.poly_a_len, args.codon_mode, args.lineardesign_bin)
+    main(
+        args.run_id,
+        args.linker,
+        args.poly_a_len,
+        args.codon_mode,
+        args.lineardesign_bin,
+        args.signal_peptide_preset,
+        args.signal_peptide_aa,
+        args.tm_domain_preset,
+        args.tm_domain_aa,
+    )
