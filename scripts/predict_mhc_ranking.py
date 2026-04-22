@@ -29,6 +29,11 @@ from netmhciipan_runner import (
     resolve_netmhciipan_bin,
     collect_netmhcii_alleles,
 )
+from immunogenicity_adapters import (
+    deepimmuno_proxy,
+    prime_proxy,
+    repitope_proxy,
+)
 
 
 def flatten_hla(hla_json: dict):
@@ -112,30 +117,38 @@ def mhc2_proxy_score(peptide: str, hla_allele: str) -> float:
     return round(max(0.0, min(1.0, (length_score * 0.5 + balance_score * 0.4 + allele_bias * 0.1))), 4)
 
 
-def deepimmuno_proxy(peptide: str) -> float:
-    """DeepImmuno 代理分：偏好多样性与带电残基比例。"""
-    pep = peptide.upper()
-    uniq = len(set(pep)) / max(len(pep), 1)
-    charged = sum(aa in "KRDEH" for aa in pep) / max(len(pep), 1)
-    return round(max(0.0, min(1.0, uniq * 0.7 + charged * 0.3)), 4)
-
-
-def prime_proxy(peptide: str) -> float:
-    """PRIME 代理分：偏好锚定位点多样性与芳香族残基。"""
-    pep = peptide.upper()
-    anchor = pep[1] + pep[-1] if len(pep) >= 2 else pep
-    anchor_div = len(set(anchor)) / max(len(anchor), 1)
-    aromatic = sum(aa in "FWY" for aa in pep) / max(len(pep), 1)
-    return round(max(0.0, min(1.0, anchor_div * 0.6 + aromatic * 0.4)), 4)
-
-
-def repitope_proxy(peptide: str) -> float:
-    """Repitope 代理分：偏好中等疏水与脯氨酸/甘氨酸比例。"""
-    pep = peptide.upper()
-    hydrophobic = sum(aa in "AILMFWVY" for aa in pep) / max(len(pep), 1)
-    pg_ratio = sum(aa in "PG" for aa in pep) / max(len(pep), 1)
-    score = (1.0 - abs(hydrophobic - 0.45)) * 0.7 + pg_ratio * 0.3
-    return round(max(0.0, min(1.0, score)), 4)
+def load_precomputed_immunogenicity(run_id: str) -> Dict[str, Dict[str, float]]:
+    """
+    读取 results/<run_id>/tool_outputs/*.tsv 作为预计算表。
+    缺失文件不报错，返回可用部分；主流程会对缺失值回退 proxy。
+    """
+    base = os.path.join("results", run_id, "tool_outputs")
+    files = {
+        "immunogenicity_deepimmuno": "deepimmuno.tsv",
+        "immunogenicity_prime": "prime.tsv",
+        "immunogenicity_repitope": "repitope.tsv",
+    }
+    merged = {}
+    for col, name in files.items():
+        path = os.path.join(base, name)
+        if not os.path.exists(path):
+            continue
+        try:
+            tdf = pd.read_csv(path, sep="\t")
+        except Exception:
+            continue
+        if "mut_peptide" not in tdf.columns or col not in tdf.columns:
+            continue
+        for _, r in tdf.iterrows():
+            pep = str(r.get("mut_peptide", "")).strip().upper()
+            if not pep:
+                continue
+            if pep not in merged:
+                merged[pep] = {}
+            v = pd.to_numeric(r.get(col), errors="coerce")
+            if pd.notna(v):
+                merged[pep][col] = float(v)
+    return merged
 
 
 def _prepare_mhc2_lookup(
@@ -225,6 +238,8 @@ def main(
     cands_mhc2 = list(dict.fromkeys(cands_mhc2))
     mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(hla_json, cands_mhc2, mhc2_backend)
     print(f"MHC-II 层: 模式={mhc2_mode}，查表条目数={len(mhc2_lookup) if mhc2_lookup else 0}")
+    precomputed_immuno = load_precomputed_immunogenicity(run_id)
+    print(f"免疫原性预计算表: 命中肽数={len(precomputed_immuno)}（缺失时自动回退 proxy）")
 
     # 加载 MHCflurry MHC-I 亲和力模型
     predictor = Class1AffinityPredictor.load()
@@ -257,9 +272,13 @@ def main(
                 m2s = mhc2_proxy_score(pep, str(pr["allele"]))
                 m2src = "proxy"
                 m2el, m2ba, m2a2 = None, None, ""
-            immunogenicity_deepimmuno = deepimmuno_proxy(pep)
-            immunogenicity_prime = prime_proxy(pep)
-            immunogenicity_repitope = repitope_proxy(pep)
+            pre = precomputed_immuno.get(pep, {})
+            immunogenicity_deepimmuno = pre.get("immunogenicity_deepimmuno", deepimmuno_proxy(pep))
+            immunogenicity_prime = pre.get("immunogenicity_prime", prime_proxy(pep))
+            immunogenicity_repitope = pre.get("immunogenicity_repitope", repitope_proxy(pep))
+            src_deepimmuno = "precomputed" if "immunogenicity_deepimmuno" in pre else "proxy"
+            src_prime = "precomputed" if "immunogenicity_prime" in pre else "proxy"
+            src_repitope = "precomputed" if "immunogenicity_repitope" in pre else "proxy"
             rows.append({
                 "mutation": row.get("mutation", ""),
                 "mut_peptide": pep,
@@ -276,6 +295,9 @@ def main(
                 "immunogenicity_deepimmuno": immunogenicity_deepimmuno,
                 "immunogenicity_prime": immunogenicity_prime,
                 "immunogenicity_repitope": immunogenicity_repitope,
+                "immunogenicity_source_deepimmuno": src_deepimmuno,
+                "immunogenicity_source_prime": src_prime,
+                "immunogenicity_source_repitope": src_repitope,
                 # 兼容旧列名（后续逐步淘汰）
                 "deepimmuno_score": immunogenicity_deepimmuno,
                 "prime_score": immunogenicity_prime,

@@ -3,13 +3,14 @@
 功能：一键串行执行 ImmunoGen MVP 全流程。
 执行顺序：
 1) validate_input.py
-2) predict_mhc_ranking.py
-3) select_top_peptides.py
-4) build_multivalent_mrna.py
-5) run_qc_and_report.py
-6) prepare_self_certification.py（POSITIVE_CONTROL.md / SELF_CHECK.md）
-7) prepare_simhub_delivery.py
-8) validate_feasibility.py
+2) run_immunogenicity_adapters.py
+3) predict_mhc_ranking.py
+4) select_top_peptides.py
+5) build_multivalent_mrna.py
+6) run_qc_and_report.py
+7) prepare_self_certification.py（POSITIVE_CONTROL.md / SELF_CHECK.md）
+8) prepare_simhub_delivery.py
+9) validate_feasibility.py
 """
 import os
 import sys
@@ -51,6 +52,12 @@ def main(
     ]
     step2 = [
         python_exe,
+        os.path.join(scripts_dir, "run_immunogenicity_adapters.py"),
+        "--run_id",
+        run_id,
+    ]
+    step3 = [
+        python_exe,
         os.path.join(scripts_dir, "predict_mhc_ranking.py"),
         "--run_id",
         run_id,
@@ -63,7 +70,7 @@ def main(
         "--wi_repitope",
         str(wi_repitope),
     ]
-    step3 = [
+    step4 = [
         python_exe,
         os.path.join(scripts_dir, "select_top_peptides.py"),
         "--run_id",
@@ -73,7 +80,7 @@ def main(
         "--min_dissimilarity",
         str(min_dissimilarity),
     ]
-    step4 = [
+    step5 = [
         python_exe,
         os.path.join(scripts_dir, "build_multivalent_mrna.py"),
         "--run_id",
@@ -85,19 +92,19 @@ def main(
         "--codon_mode",
         codon_mode,
     ]
-    step5 = [
+    step6 = [
         python_exe,
         os.path.join(scripts_dir, "run_qc_and_report.py"),
         "--run_id",
         run_id,
     ]
-    step6 = [
+    step7 = [
         python_exe,
         os.path.join(scripts_dir, "prepare_self_certification.py"),
         "--run_id",
         run_id,
     ]
-    step7 = [
+    step8 = [
         python_exe,
         os.path.join(scripts_dir, "prepare_simhub_delivery.py"),
         "--run_id",
@@ -105,7 +112,7 @@ def main(
         "--top_k",
         str(top_k_md),
     ]
-    step8 = [
+    step9 = [
         python_exe,
         os.path.join(scripts_dir, "validate_feasibility.py"),
         "--run_id",
@@ -123,6 +130,7 @@ def main(
     run_step(step6)
     run_step(step7)
     run_step(step8)
+    run_step(step9)
     print("\n全部步骤执行完成。")
 
 

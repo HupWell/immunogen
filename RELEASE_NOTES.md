@@ -1,5 +1,14 @@
 # ImmunoGen Release Notes
 
+## v0.2.5 - 免疫原性适配器 + 预计算表合并
+
+- 新增独立适配器模块：`scripts/immunogenicity_adapters.py`，以及 `run_deepimmuno_adapter.py` / `run_prime_adapter.py` / `run_repitope_adapter.py`。
+- 新增批量入口：`scripts/run_immunogenicity_adapters.py`，输出 `results/<run_id>/tool_outputs/*.tsv`。
+- `predict_mhc_ranking.py` 增加按 `run_id` 读取预计算表并 merge 的逻辑，缺失自动回退 proxy；新增来源列 `immunogenicity_source_*`。
+- `run_all.py` 将适配器批量步骤纳入默认流水线（校验后先生成预计算表，再预测）。
+
+---
+
 ## v0.2.4 - 文档：`netmhciipan_setup` 简化为 conda + 三步装 NetMHC
 
 - **`docs/netmhciipan_setup.md`**：区分「不装也能跑」与 WSL 下 **conda + 下载 + 两个环境变量** 的最短路径。

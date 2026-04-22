@@ -34,7 +34,7 @@
 | 状态 | 事项 |
 | :---: | --- |
 | [x] | 统一 **输出列契约**：`immunogenicity_deepimmuno`、`immunogenicity_prime`、`immunogenicity_repitope`、综合列 `immunogenicity`；加权支持 `predict_mhc_ranking.py --wi_deepimmuno/--wi_prime/--wi_repitope`（保留旧列别名兼容历史流程） |
-| [ ] | 采用 **适配器 + 预计算表** 策略：各工具独立脚本或模块，输出 `tool_outputs/*.tsv`，主流程按 `run_id` merge |
+| [x] | 采用 **适配器 + 预计算表** 策略：新增独立脚本 `run_deepimmuno_adapter.py` / `run_prime_adapter.py` / `run_repitope_adapter.py`（批量入口 `run_immunogenicity_adapters.py`），输出 `results/<run_id>/tool_outputs/*.tsv`；`predict_mhc_ranking.py` 按 `run_id` 自动 merge，缺失回退 proxy |
 | [ ] | **DeepImmuno**：确认官方/论文仓库、权重文件、推理依赖（GPU 等），封装为可选 extra |
 | [ ] | **PRIME**：确认获取方式（CLI/API/批处理）与许可证，封装 runner |
 | [ ] | **Repitope**：同上 |

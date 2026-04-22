@@ -86,6 +86,7 @@ python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasib
 
 ```bash
 python scripts/validate_input.py --run_id R001
+python scripts/run_immunogenicity_adapters.py --run_id R001
 python scripts/predict_mhc_ranking.py --run_id R001 --wi_deepimmuno 1 --wi_prime 1 --wi_repitope 1
 python scripts/select_top_peptides.py --run_id R001 --top_n 10 --min_dissimilarity 0.1
 python scripts/build_multivalent_mrna.py --run_id R001 --linker AAY --poly_a_len 120 --codon_mode optimized
