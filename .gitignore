@@ -23,9 +23,8 @@ Thumbs.db
 # Project outputs
 results/
 
-# Simulation delivery heavy files
-deliveries/**/to_simhub/**/protein.pdb
-deliveries/**/to_simhub/**/ligand.sdf
+# Simulation Hub 粗构象（体积较大时可取消注释以不入库）
+# deliveries/**/to_simhub/**/complex.pdb
 
 # Optional cache/tmp
 *.log

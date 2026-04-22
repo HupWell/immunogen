@@ -187,6 +187,7 @@ def write_report(
 - `mrna_vaccine.fasta`
 - `mrna_design.json`
 - `qc_metrics.json`
+- `POSITIVE_CONTROL.md`、`SELF_CHECK.md`：完整执行 `run_all.py` 时由 `prepare_self_certification.py` 写入；若仅单独运行 `run_qc_and_report.py` 则可能尚未生成。
 - `figures/{os.path.basename(heatmap_file)}`
 - `figures/{os.path.basename(structure_file)}`
 

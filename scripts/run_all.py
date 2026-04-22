@@ -7,8 +7,9 @@
 3) select_top_peptides.py
 4) build_multivalent_mrna.py
 5) run_qc_and_report.py
-6) prepare_simhub_delivery.py
-7) validate_feasibility.py
+6) prepare_self_certification.py（POSITIVE_CONTROL.md / SELF_CHECK.md）
+7) prepare_simhub_delivery.py
+8) validate_feasibility.py
 """
 import os
 import sys
@@ -80,13 +81,19 @@ def main(
     ]
     step6 = [
         python_exe,
+        os.path.join(scripts_dir, "prepare_self_certification.py"),
+        "--run_id",
+        run_id,
+    ]
+    step7 = [
+        python_exe,
         os.path.join(scripts_dir, "prepare_simhub_delivery.py"),
         "--run_id",
         run_id,
         "--top_k",
         str(top_k_md),
     ]
-    step7 = [
+    step8 = [
         python_exe,
         os.path.join(scripts_dir, "validate_feasibility.py"),
         "--run_id",
@@ -103,6 +110,7 @@ def main(
     run_step(step5)
     run_step(step6)
     run_step(step7)
+    run_step(step8)
     print("\n全部步骤执行完成。")
 
 

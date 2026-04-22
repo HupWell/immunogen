@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-功能：生成给 Simulation Hub 的最小交付包（MVP 版）。
+功能：按 Simulation Hub 输入契约（分支 B：peptide_mhc）生成交付包。
 
 输入：
 - results/<run_id>/selected_peptides.csv
 - deliveries/<run_id>/to_immunogen/meta.json
+- deliveries/<run_id>/to_immunogen/hla_typing.json（用于 hla_allele.txt）
 
-输出：
-- deliveries/<run_id>/to_simhub/<case_id>/protein.pdb        （占位文件）
-- deliveries/<run_id>/to_simhub/<case_id>/ligand.sdf         （占位文件）
+输出（禁止使用 SDF）：
+- deliveries/<run_id>/to_simhub/<case_id>/complex.pdb   # Chain M(α) + B(β2m) + P(peptide)，粗初始构象
+- deliveries/<run_id>/to_simhub/<case_id>/hla_allele.txt  # 可选，Top1 对应 HLA
 - deliveries/<run_id>/to_simhub/<case_id>/meta.json
 - deliveries/<run_id>/to_simhub/<case_id>/selected_for_md.csv
 """
@@ -39,19 +40,47 @@ def residue_name(aa: str) -> str:
     return mapping.get(aa.upper(), "GLY")
 
 
-def write_coarse_complex_pdb(path: str, peptide: str):
+def write_complex_pdb(path: str, peptide: str):
     """
-    生成粗粒度 peptide-MHC 初始复合体（非占位空文件）：
-    - 链 P：候选肽 CA 骨架
-    - 链 H/I：简化 MHC 槽体两侧轮廓
+    生成粗粒度 peptide-MHC 初始 complex.pdb（SimHub 契约：多链纯蛋白）。
+    - Chain M：简化 MHC-I α 槽体一侧（CA 骨架）
+    - Chain B：简化 β2m 轮廓（CA 骨架）
+    - Chain P：候选肽 CA 骨架
+    生产环境请替换为 AlphaFold-Multimer / PANDORA 输出。
     """
     atom_id = 1
     lines = [
-        "HEADER    COARSE PEPTIDE-MHC INITIAL COMPLEX",
-        "REMARK    coarse initial conformer for simulation handoff",
-        "REMARK    replace with AlphaFold-Multimer/PANDORA for production",
+        "HEADER    COARSE PEPTIDE-MHC COMPLEX (SimHub handoff)",
+        "REMARK    Chain M = MHC class I alpha (coarse CA trace)",
+        "REMARK    Chain B = beta-2-microglobulin proxy (coarse CA trace)",
+        "REMARK    Chain P = neoantigen peptide (CA trace)",
+        "REMARK    Replace with AlphaFold-Multimer or PANDORA for production MD",
     ]
-    for i, aa in enumerate(peptide, start=1):
+    # Chain M：槽体一侧
+    for i in range(1, 51):
+        x = (i - 1) * 1.5
+        y = 6.0
+        z = 1.5 * np.sin(i / 3.0)
+        lines.append(
+            f"ATOM  {atom_id:5d}  CA  ALA M{i:4d}    "
+            f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 30.00           C"
+        )
+        atom_id += 1
+    lines.append("TER")
+    # Chain B：β2m 代理
+    for i in range(1, 51):
+        x = (i - 1) * 1.5
+        y = -6.0
+        z = 1.5 * np.cos(i / 3.0)
+        lines.append(
+            f"ATOM  {atom_id:5d}  CA  ALA B{i:4d}    "
+            f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 30.00           C"
+        )
+        atom_id += 1
+    lines.append("TER")
+    # Chain P：肽段
+    pep = (peptide or "AAAAAAAAA")[:15]
+    for i, aa in enumerate(pep, start=1):
         x = (i - 1) * 3.8
         y = 0.0
         z = 0.0
@@ -60,46 +89,29 @@ def write_coarse_complex_pdb(path: str, peptide: str):
             f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           C"
         )
         atom_id += 1
-    for i in range(1, 51):
-        x = (i - 1) * 1.5
-        y = 6.0
-        z = 1.5 * np.sin(i / 3.0)
-        lines.append(
-            f"ATOM  {atom_id:5d}  CA  ALA H{i:4d}    "
-            f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 30.00           C"
-        )
-        atom_id += 1
-    for i in range(1, 51):
-        x = (i - 1) * 1.5
-        y = -6.0
-        z = 1.5 * np.cos(i / 3.0)
-        lines.append(
-            f"ATOM  {atom_id:5d}  CA  ALA I{i:4d}    "
-            f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 30.00           C"
-        )
-        atom_id += 1
     lines.extend(["TER", "END"])
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
-def write_placeholder_sdf(path: str):
-    """写入最小 SDF 占位内容。"""
-    content = (
-        "placeholder_ligand\n"
-        "  ImmunoGenMVP\n"
-        "\n"
-        "  0  0  0  0  0  0            999 V2000\n"
-        "M  END\n"
-        "$$$$\n"
-    )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+def pick_hla_allele(md_row: pd.Series, hla_json_path: str) -> str:
+    """从选中行或 hla_typing.json 取一个等位基因字符串。"""
+    if "hla_allele" in md_row.index and pd.notna(md_row.get("hla_allele")):
+        return str(md_row["hla_allele"]).strip()
+    if os.path.exists(hla_json_path):
+        with open(hla_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for key in ("HLA-A", "HLA-B", "HLA-C"):
+            vals = data.get(key) or []
+            if isinstance(vals, list) and vals:
+                return str(vals[0]).strip()
+    return "HLA-A*02:01"
 
 
 def main(run_id: str, top_k: int):
     selected_file = os.path.join("results", run_id, "selected_peptides.csv")
     input_meta_file = os.path.join("deliveries", run_id, "to_immunogen", "meta.json")
+    hla_file = os.path.join("deliveries", run_id, "to_immunogen", "hla_typing.json")
 
     if not os.path.exists(selected_file):
         raise FileNotFoundError(f"未找到输入文件: {selected_file}")
@@ -108,9 +120,9 @@ def main(run_id: str, top_k: int):
     out_dir = os.path.join("deliveries", run_id, "to_simhub", case_id)
     os.makedirs(out_dir, exist_ok=True)
 
-    protein_file = os.path.join(out_dir, "protein.pdb")
-    ligand_file = os.path.join(out_dir, "ligand.sdf")
-    meta_file = os.path.join(out_dir, "meta.json")
+    complex_pdb = os.path.join(out_dir, "complex.pdb")
+    hla_txt = os.path.join(out_dir, "hla_allele.txt")
+    meta_out = os.path.join(out_dir, "meta.json")
     md_list_file = os.path.join(out_dir, "selected_for_md.csv")
 
     df = pd.read_csv(selected_file)
@@ -120,29 +132,43 @@ def main(run_id: str, top_k: int):
     md_df = df.head(top_k).copy()
     md_df.to_csv(md_list_file, index=False, encoding="utf-8-sig")
 
-    top_peptide = str(md_df.iloc[0].get("mut_peptide", "AAAAAAAAA")).strip().upper()
-    write_coarse_complex_pdb(protein_file, top_peptide[:15] if top_peptide else "AAAAAAAAA")
-    write_placeholder_sdf(ligand_file)
+    top_row = md_df.iloc[0]
+    top_peptide = str(top_row.get("mut_peptide", "AAAAAAAAA")).strip().upper()
+    write_complex_pdb(complex_pdb, top_peptide[:15] if top_peptide else "AAAAAAAAA")
+
+    allele = pick_hla_allele(top_row, hla_file)
+    with open(hla_txt, "w", encoding="utf-8") as f:
+        f.write(allele + "\n")
 
     delivery_meta = {
         "run_id": run_id,
         "case_id": case_id,
         "molecule_type": "peptide_mhc",
         "delivery_stage": "coarse_initial_complex",
+        "contract": "SimHub peptide_mhc branch B: complex.pdb + meta.json + optional hla_allele.txt; no SDF",
         "top_k_for_md": int(top_k),
         "selected_for_md_file": "selected_for_md.csv",
         "notes": [
-            "protein.pdb 当前为粗粒度初始构象，可用于流程对接，建议替换为真实 peptide-MHC 建模结果。",
-            "ligand.sdf 当前为占位文件，用于占位保持接口一致。",
-            "建议后续使用 AlphaFold-Multimer 或 PANDORA 构建复合物初始构象。"
+            "complex.pdb 为粗粒度 M/B/P 三链 CA 初始构象，仅用于流程联通与接口验收。",
+            "禁止使用 SDF + AM1-BCC 处理多肽；多肽须保留氨基酸残基拓扑，走 AMBER14SB 蛋白力场。",
+            "生产环境请用 AlphaFold-Multimer 或 PANDORA 生成高精度 complex.pdb 后再送 MD。"
         ]
     }
-    with open(meta_file, "w", encoding="utf-8") as f:
+    with open(meta_out, "w", encoding="utf-8") as f:
         json.dump(delivery_meta, f, ensure_ascii=False, indent=2)
 
-    print(f"完成: {protein_file}")
-    print(f"完成: {ligand_file}")
-    print(f"完成: {meta_file}")
+    # 移除旧版文件名（若存在），避免与契约混淆
+    for legacy in ("protein.pdb", "ligand.sdf"):
+        legacy_path = os.path.join(out_dir, legacy)
+        if os.path.exists(legacy_path):
+            try:
+                os.remove(legacy_path)
+            except OSError:
+                pass
+
+    print(f"完成: {complex_pdb}")
+    print(f"完成: {hla_txt}")
+    print(f"完成: {meta_out}")
     print(f"完成: {md_list_file}")
 
 
