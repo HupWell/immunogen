@@ -19,7 +19,7 @@
 | 状态 | 事项 |
 | :---: | --- |
 | [x] | 在 `hla_typing.json` 契约中明确 **II 类等位基因**（`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`）及与 OptiType/HLA-HD 的字段映射 → **`docs/hla_typing.md`** + `data/examples/hla_typing.class_ii.example.json` + `scripts/hla_typing_spec.py` + `validate_input.py` |
-| [ ] | 维护 **等位基因名称映射表**（JSON/YAML）：BioDriver → NetMHCIIpan 所需格式 |
+| [x] | 维护 **等位基因名称映射表**（JSON，YAML 可用同结构）：BioDriver/契约 → NetMHCIIpan → `data/hla_allele_map_netmhciipan.json` + `scripts/hla_allele_to_netmhciipan.py`；白话说明 **`docs/allele_naming_simple.md`**，契约仍见 **`docs/hla_typing.md`** |
 | [ ] | 实现 **NetMHCIIpan 调用层**（推荐 Linux/WSL2/Docker + `subprocess`；Windows 本机需约定路径或容器） |
 | [ ] | 批处理输入：候选肽列表；解析输出（xls/stdout），合并入 `peptide_mhc_ranking.csv`（新列如 `mhc2_affinity` / `mhc2_pct_rank`） |
 | [ ] | 在 `predict_mhc_ranking.py` 增加 `--mhc2_backend netmhciipan|proxy`，缺失工具时 **回退** 现有 `mhc2_proxy_score` |

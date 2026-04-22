@@ -1,5 +1,12 @@
 # ImmunoGen Release Notes
 
+## v0.2.2 - NetMHCIIpan 等位基因映射表 + 白话文档
+
+- 新增 **`data/hla_allele_map_netmhciipan.json`**（`manual_overrides` 手工表，默认可空）、**`scripts/hla_allele_to_netmhciipan.py`**（常见简写补 `HLA-` 前缀）。
+- 新增 **`docs/allele_naming_simple.md`**（非生物学背景可读）；**`docs/hla_typing.md`** 整篇改短、与上文互链。
+
+---
+
 ## v0.2.1 - hla_typing.json 扩展契约（MHC-II 可选键）
 
 - 新增 **`docs/hla_typing.md`**：必备 I 类（`HLA-A/B/C`）、可选 II 类（`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`），并说明 **OptiType**（仅 I）与 **HLA-HD**（I+II）到 JSON 字段的映射。

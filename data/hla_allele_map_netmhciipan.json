@@ -1,0 +1,6 @@
+{
+  "_说明": "manual_overrides：from_biodriver=上游原样，to_netmhciipan=给 NetMHCIIpan 的字符串（与官方示例一致最稳）。其余见 docs/allele_naming_simple.md。",
+  "tool": "NetMHCIIpan",
+  "version_note": "以你本机安装的数据库与帮助文档为准；大版本间等位基因列表可能略有差别。",
+  "manual_overrides": []
+}

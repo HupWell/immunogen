@@ -116,4 +116,6 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
 - `FINAL_CHECKLIST.md` — 交付前自检
 - `RELEASE_NOTES.md` — 版本与里程碑
 - `docs/TODO.md` — **后续完善清单**（NetMHCIIpan、免疫原性真工具、AF/PANDORA、信号肽/LNP 等）
-- `docs/hla_typing.md` — **`hla_typing.json` 字段契约**（I 类必备、II 类可选、OptiType/HLA-HD 映射）
+- `docs/hla_typing.md` — **`hla_typing.json` 字段说明**（I 类必备、II 类可选、与上游字段对照）
+- `docs/allele_naming_simple.md` — **等位基因/NetMHC 写给非生信背景**（简写、映射表、和 JSON 怎么配合）
+- `data/hla_allele_map_netmhciipan.json` — **BioDriver → NetMHCIIpan** 工具有时对不上的「手工改一行」表（可空，靠脚本默认补 `HLA-`）
