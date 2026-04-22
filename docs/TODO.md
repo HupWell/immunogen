@@ -35,11 +35,11 @@
 | :---: | --- |
 | [x] | 统一 **输出列契约**：`immunogenicity_deepimmuno`、`immunogenicity_prime`、`immunogenicity_repitope`、综合列 `immunogenicity`；加权支持 `predict_mhc_ranking.py --wi_deepimmuno/--wi_prime/--wi_repitope`（保留旧列别名兼容历史流程） |
 | [x] | 采用 **适配器 + 预计算表** 策略：新增独立脚本 `run_deepimmuno_adapter.py` / `run_prime_adapter.py` / `run_repitope_adapter.py`（批量入口 `run_immunogenicity_adapters.py`），输出 `results/<run_id>/tool_outputs/*.tsv`；`predict_mhc_ranking.py` 按 `run_id` 自动 merge，缺失回退 proxy |
-| [ ] | **DeepImmuno**：确认官方/论文仓库、权重文件、推理依赖（GPU 等），封装为可选 extra |
-| [ ] | **PRIME**：确认获取方式（CLI/API/批处理）与许可证，封装 runner |
-| [ ] | **Repitope**：同上 |
-| [ ] | `predict_mhc_ranking.py`：若存在预计算文件则 **优先读入**，否则保留 `deepimmuno_proxy` / `prime_proxy` / `repitope_proxy` |
-| [ ] | 文档：在 `SELF_CHECK.md` 标明每条 run 使用的是 **真模型** 还是 **proxy** 及版本 |
+| [x] | **DeepImmuno**：封装可选真模型 runner（`real_tsv` / `real_cmd` / `proxy`），命令失败自动回退（`auto`） |
+| [x] | **PRIME**：同样支持可选真模型 runner（`real_tsv` / `real_cmd` / `proxy`） |
+| [x] | **Repitope**：同上 |
+| [x] | `predict_mhc_ranking.py`：预计算文件优先 merge，缺失回退 `deepimmuno_proxy` / `prime_proxy` / `repitope_proxy` |
+| [x] | 文档与自证：`SELF_CHECK.md` 增加 `immunogenicity_source_*` 统计，标明真模型/proxy 来源 |
 
 **相关代码：** `scripts/predict_mhc_ranking.py` 中 `deepimmuno_proxy`、`prime_proxy`、`repitope_proxy` 及 `rank_score` 组合逻辑。
 

@@ -39,6 +39,9 @@ def main(
     wi_deepimmuno: float,
     wi_prime: float,
     wi_repitope: float,
+    backend_deepimmuno: str,
+    backend_prime: str,
+    backend_repitope: str,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -55,6 +58,12 @@ def main(
         os.path.join(scripts_dir, "run_immunogenicity_adapters.py"),
         "--run_id",
         run_id,
+        "--backend_deepimmuno",
+        backend_deepimmuno,
+        "--backend_prime",
+        backend_prime,
+        "--backend_repitope",
+        backend_repitope,
     ]
     step3 = [
         python_exe,
@@ -163,6 +172,24 @@ if __name__ == "__main__":
     parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
     parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")
     parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
+    parser.add_argument(
+        "--backend_deepimmuno",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "proxy"],
+        help="DeepImmuno 适配器后端",
+    )
+    parser.add_argument(
+        "--backend_prime",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "proxy"],
+        help="PRIME 适配器后端",
+    )
+    parser.add_argument(
+        "--backend_repitope",
+        default="auto",
+        choices=["auto", "real_tsv", "real_cmd", "proxy"],
+        help="Repitope 适配器后端",
+    )
     args = parser.parse_args()
 
     main(
@@ -178,4 +205,7 @@ if __name__ == "__main__":
         wi_deepimmuno=args.wi_deepimmuno,
         wi_prime=args.wi_prime,
         wi_repitope=args.wi_repitope,
+        backend_deepimmuno=args.backend_deepimmuno,
+        backend_prime=args.backend_prime,
+        backend_repitope=args.backend_repitope,
     )

@@ -86,7 +86,7 @@ python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasib
 
 ```bash
 python scripts/validate_input.py --run_id R001
-python scripts/run_immunogenicity_adapters.py --run_id R001
+python scripts/run_immunogenicity_adapters.py --run_id R001 --backend_deepimmuno auto --backend_prime auto --backend_repitope auto
 python scripts/predict_mhc_ranking.py --run_id R001 --wi_deepimmuno 1 --wi_prime 1 --wi_repitope 1
 python scripts/select_top_peptides.py --run_id R001 --top_n 10 --min_dissimilarity 0.1
 python scripts/build_multivalent_mrna.py --run_id R001 --linker AAY --poly_a_len 120 --codon_mode optimized
@@ -95,6 +95,15 @@ python scripts/prepare_self_certification.py --run_id R001
 python scripts/prepare_simhub_delivery.py --run_id R001 --top_k 3
 python scripts/validate_feasibility.py --run_id R001 --top_n 10
 ```
+
+说明（免疫原性真模型）：
+- `run_immunogenicity_adapters.py` 支持每个工具独立后端：`auto` / `real_tsv` / `real_cmd` / `proxy`。
+- `real_tsv`：读取 `results/<run_id>/tool_outputs/raw/{deepimmuno|prime|repitope}.tsv`。
+- `real_cmd`：设置环境变量命令模板（示例）：
+  - `IMMUNO_DEEPIMMUNO_CMD="python tools/deep_runner.py --input {input_tsv} --output {output_tsv}"`
+  - `IMMUNO_PRIME_CMD="python tools/prime_runner.py --input {input_tsv} --output {output_tsv}"`
+  - `IMMUNO_REPITOPE_CMD="python tools/repitope_runner.py --input {input_tsv} --output {output_tsv}"`
+  命令需要产出 TSV，至少包含 `mut_peptide` 和分数字段（`score` 或对应 `immunogenicity_*`）。
 
 ---
 

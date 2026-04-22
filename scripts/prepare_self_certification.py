@@ -69,6 +69,22 @@ def write_self_check(
     mfe = qc.get("rnafold_mfe")
     rf_status = qc.get("rnafold_status", "unknown")
     mhc2_note = "（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列：proxy=代理分，netmhciipan=实跑）"
+    immuno_note = "免疫原性来源：未读取到来源列，默认按 proxy 解释。"
+    if ranking is not None:
+        cols = [
+            "immunogenicity_source_deepimmuno",
+            "immunogenicity_source_prime",
+            "immunogenicity_source_repitope",
+        ]
+        parts = []
+        for c in cols:
+            if c in ranking.columns:
+                vc = ranking[c].fillna("").astype(str).value_counts()
+                brief = "，".join(f"{k}:{v}" for k, v in vc.items() if k)
+                if brief:
+                    parts.append(f"{c}={brief}")
+        if parts:
+            immuno_note = "免疫原性来源统计：" + "；".join(parts)
     mhc2_row = "MHC-II | **代理分**（未接 NetMHCIIpan 或无 II 类分型时） | 辅助排序的 II 类相关量纲分"
     if ranking is not None and "mhc2_backend" in ranking.columns:
         vc = ranking["mhc2_backend"].fillna("").astype(str).value_counts()
@@ -88,6 +104,7 @@ def write_self_check(
 | mRNA 二级结构 / MFE | **ViennaRNA**（优先 `RNAfold` 命令，否则 Python `RNA` 绑定） | MFE 与 dot-bracket，用于质控图与 `mrna_design.json` |
 
 - {mhc2_note}
+- {immuno_note}
 
 ## 2. 关键阈值与过滤（当前默认）
 

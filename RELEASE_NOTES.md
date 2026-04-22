@@ -1,5 +1,13 @@
 # ImmunoGen Release Notes
 
+## v0.2.6 - 免疫原性真模型可选接入（安全回退）
+
+- `immunogenicity_adapters.py` 新增真实后端策略：`real_tsv` / `real_cmd` / `proxy`，`auto` 按 real→proxy 回退。
+- 三个独立适配器与批量入口均支持后端参数；`run_all.py` 透传 `--backend_deepimmuno/--backend_prime/--backend_repitope`。
+- `prepare_self_certification.py` 在 `SELF_CHECK.md` 增加 `immunogenicity_source_*` 统计，明确每轮是真模型还是代理分。
+
+---
+
 ## v0.2.5 - 免疫原性适配器 + 预计算表合并
 
 - 新增独立适配器模块：`scripts/immunogenicity_adapters.py`，以及 `run_deepimmuno_adapter.py` / `run_prime_adapter.py` / `run_repitope_adapter.py`。
