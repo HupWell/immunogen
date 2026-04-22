@@ -1,5 +1,12 @@
 # ImmunoGen Release Notes
 
+## v0.2.1 - hla_typing.json 扩展契约（MHC-II 可选键）
+
+- 新增 **`docs/hla_typing.md`**：必备 I 类（`HLA-A/B/C`）、可选 II 类（`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`），并说明 **OptiType**（仅 I）与 **HLA-HD**（I+II）到 JSON 字段的映射。
+- 新增 **`data/examples/hla_typing.class_ii.example.json`**、**`scripts/hla_typing_spec.py`**；**`validate_input.py`** 校验可选 II 类键并统计 II 类条数，未知顶键仅警告。
+
+---
+
 ## v0.2.0 - 任务书同步（自证包 + SimHub 契约）
 
 - **自证最小包**：`results/<run_id>/` 增加 `POSITIVE_CONTROL.md`、`SELF_CHECK.md`（与 `REPORT.md` 配套）；由 `prepare_self_certification.py` 生成，`run_all.py` 在 SimHub 交付前自动执行。

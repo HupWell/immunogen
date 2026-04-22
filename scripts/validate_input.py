@@ -9,10 +9,16 @@ import json
 import argparse
 import pandas as pd
 
+from hla_typing_spec import (
+    KNOWN_HLA_KEYS,
+    OPTIONAL_HLA_II_KEYS,
+    REQUIRED_HLA_I_KEYS,
+    flatten_hla_class_ii,
+)
 
 REQUIRED_CSV_COLUMNS = ["mut_peptide", "wt_peptide", "variant_vaf"]
 OPTIONAL_CSV_COLUMNS = ["mutation", "transcript_id"]
-REQUIRED_HLA_KEYS = ["HLA-A", "HLA-B", "HLA-C"]
+REQUIRED_HLA_KEYS = list(REQUIRED_HLA_I_KEYS)
 
 
 def validate_csv(csv_path: str):
@@ -42,12 +48,23 @@ def validate_csv(csv_path: str):
 
 
 def validate_hla_json(hla_path: str):
-    """检查 hla_typing.json 是否包含 HLA-A/B/C 且为列表。"""
+    """
+    检查 hla_typing.json 是否满足契约（见 docs/hla_typing.md）。
+    - 必备 HLA-A/B/C；可选 HLA-DRB1、HLA-DQA1、HLA-DQB1、HLA-DPA1、HLA-DPB1。
+    - 未知顶键将警告并忽略，不阻断通过。
+    """
     if not os.path.exists(hla_path):
         raise FileNotFoundError(f"未找到输入文件: {hla_path}")
 
     with open(hla_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError("hla_typing.json 根节点必须是 JSON 对象。")
+
+    for k in data.keys():
+        if k not in KNOWN_HLA_KEYS:
+            print(f"警告: hla_typing.json 含未约定键（可忽略，建议与 BioDriver 对齐白名单）: {k!r}")
 
     missing = [k for k in REQUIRED_HLA_KEYS if k not in data]
     if missing:
@@ -56,12 +73,24 @@ def validate_hla_json(hla_path: str):
     allele_total = 0
     for k in REQUIRED_HLA_KEYS:
         v = data.get(k)
+        if v is None:
+            raise ValueError(f"hla_typing.json 中 {k} 不能为 null，请使用 [] 或省略（不可省略必备键）。")
         if not isinstance(v, list):
             raise ValueError(f"hla_typing.json 中 {k} 必须是列表。")
         allele_total += len([x for x in v if str(x).strip()])
 
     if allele_total == 0:
         raise ValueError("hla_typing.json 中没有有效的 HLA 等位基因。")
+
+    # 可选 MHC-II：若存在则必须为列表
+    for k in OPTIONAL_HLA_II_KEYS:
+        if k not in data:
+            continue
+        v = data.get(k)
+        if v is None:
+            raise ValueError(f"hla_typing.json 中 {k} 不能为 null，请使用 [] 或删除该键。")
+        if not isinstance(v, list):
+            raise ValueError(f"hla_typing.json 中 {k} 必须是列表。")
 
     return data
 
@@ -89,11 +118,13 @@ def main(run_id: str):
     print(f"候选肽条目数: {len(df)}")
     print(f"CSV列: {list(df.columns)}")
     print(f"可选列建议: {OPTIONAL_CSV_COLUMNS}")
+    n_ii = len(flatten_hla_class_ii(hla_data))
     print(
         "HLA计数: "
         f"A={len(hla_data.get('HLA-A', []))}, "
         f"B={len(hla_data.get('HLA-B', []))}, "
-        f"C={len(hla_data.get('HLA-C', []))}"
+        f"C={len(hla_data.get('HLA-C', []))}, "
+        f"II 类合计(若有)={n_ii}（键名见 docs/hla_typing.md）"
     )
 
 

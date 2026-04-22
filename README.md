@@ -65,7 +65,7 @@ mhcflurry-downloads fetch
 `deliveries/<run_id>/to_immunogen/` 下必须包含：
 
 - `neoantigen_candidates.csv`（列：`mutation, mut_peptide, wt_peptide, transcript_id, variant_vaf`）
-- `hla_typing.json`（`HLA-A` / `HLA-B` / `HLA-C` 数组）
+- `hla_typing.json` — **必备** `HLA-A` / `HLA-B` / `HLA-C`；**可选** II 类：`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`（供 NetMHCIIpan 等；OptiType 仅 I 类，II 常由 HLA-HD 等补充）。完整说明与上游映射见 **`docs/hla_typing.md`**，含 II 示例 `data/examples/hla_typing.class_ii.example.json`。
 - `meta.json`（建议含 `case_id`，用于 `to_simhub` 子目录名）
 
 ---
@@ -116,3 +116,4 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
 - `FINAL_CHECKLIST.md` — 交付前自检
 - `RELEASE_NOTES.md` — 版本与里程碑
 - `docs/TODO.md` — **后续完善清单**（NetMHCIIpan、免疫原性真工具、AF/PANDORA、信号肽/LNP 等）
+- `docs/hla_typing.md` — **`hla_typing.json` 字段契约**（I 类必备、II 类可选、OptiType/HLA-HD 映射）
