@@ -1,44 +1,92 @@
-# 如何启用 NetMHCIIpan（MHC-II 真预测）
+# NetMHCIIpan：最简说明（conda + 分开装）
 
-## 1. 你需要什么
+**原则：conda 只装 Python 依赖；NetMHCIIpan 是单独下载的程序，不放 conda 里也行。**
 
-- 在 **Linux / WSL2** 中安装好 [NetMHCIIpan](https://services.healthtech.dtu.dk/service.php?NetMHCIIpan-4.1) 可移植版，或把 `netMHCIIpan` 可执行文件加入 **PATH**。
-- `hla_typing.json` 里要有 **能自动转换的 II 类**（至少一条 **HLA-DRB1*xx:yy** 这种；脚本会转为工具常用的 `DRB1_xxyy`）。  
-  更复杂的 DQ/DP 双链名请写在 `data/hla_allele_map_netmhciipan.json` 的 `manual_overrides` 里，见 `docs/allele_naming_simple.md`。
-- 候选肽在 **PEPTIDE 模式** 下对 NetMHCIIpan 常要求 **长度 ≥9**；更短的链本流程仍用 **MHC-II 代理分**。
+---
 
-## 2. 环境变量
+## 情况 A：先不装 NetMHCII（推荐新手）
 
-| 变量 | 说明 |
-|------|------|
-| `NETMHCIIPAN_BIN` | 可执行文件**完整路径**（推荐），例如 `/opt/netMHCIIpan-4.1/netMHCIIpan` |
-| `NETMHCIIPAN_HOME` | 工作目录；若工具必须从安装目录读数据，**必须**设置 |
-| `NETMHCIIPAN_BA=0` | 不自动加 `-BA`（默认会加，以便解析 nM 列） |
-| `NETMHCIIPAN_EXTRA` | 其它参数，空格分隔，例如 `length` 等（需符合你本机 `netMHCIIpan -h`） |
-| `NETMHCIIPAN_TIMEOUT` | 秒，默认 600 |
+- 不用做任何事。  
+- 跑流程时用：`--mhc2_backend auto` 或 `proxy`（MHC-II 用**代理分**，照样出完整结果）。  
+- 等需要「真 II 类」再去做情况 B。
 
-## 3. 如何接到流水线
+---
 
-- `predict_mhc_ranking.py`：`--mhc2_backend auto`（默认，有工具则跑，否则代理） / `netmhciipan`（强制，失败就报错） / `proxy`（始终代理）。
-- `run_all.py` 同样带 `--mhc2_backend`。
-- 输出 CSV 中新增/使用列：`mhc2_score`、`mhc2_el_rank`、`mhc2_ba_nm`、`mhc2_class2_allele`（本工具输出中的 MHC 列名）、`mhc2_backend`（`netmhciipan` 或 `proxy`）。
+## 情况 B：在 WSL2 / Linux 里接真 NetMHCII（三步）
 
-## 4. Windows 说明
+在 **WSL2 的 Ubuntu 终端**里操作（[微软 WSL 安装说明](https://learn.microsoft.com/zh-cn/windows/wsl/install)），不要用 Windows 自带的 CMD 去跑 `netMHCIIpan`。
 
-- 若未在 WSL/容器里装 NetMHCIIpan，**保持 `auto` 或 `proxy` 即可**，流水线照常完成。
-- 在 Windows 本机**直接**跑可执行文件的情况较少；**推荐在 WSL2 里装工具并在此环境中运行** `python scripts/run_all.py`（同一路径能访问 `deliveries/`、`results/`）。
-
-## 5. 命令探针
-
-安装完成后可在终端执行（Linux/WSL）：
+### 第 1 步：Python 用 conda（和平时一样）
 
 ```bash
-netMHCIIpan -h
+conda create -n immunogen python=3.10 -y
+conda activate immunogen
+# 在仓库根目录，依赖按 README 装齐（pandas、mhcflurry、ViennaRNA 等）
 ```
 
-若能看到 `NetMHCIIpan-4` 等版本信息，与 ImmunoGen 的解析器预期一致。具体参数**以你本机 `-h` 为准**；若默认 `-f/-a/-inptype` 不兼容，请发 issue 并附上 `-h` 原文。
+以后跑 `python scripts/run_all.py` 时**先** `conda activate immunogen` 即可。
 
-## 6. 实现位置
+### 第 2 步：只装 NetMHCIIpan 本体
 
-- 子进程与解析：`scripts/netmhciipan_runner.py`
-- 与 `rank_score` 衔接：`scripts/predict_mhc_ranking.py`
+1. 打开：  
+   [https://services.healthtech.dtu.dk/service.php?NetMHCIIpan-4.1](https://services.healthtech.dtu.dk/service.php?NetMHCIIpan-4.1)  
+   （或更新的 4.2 页面里的 **Download**）  
+2. 同意条款后下载 **可移植包** `tar.gz`，解压到固定目录，例如：  
+   `~/tools/NetMHCIIpan-4.1/`
+3. 在该目录下找到可执行名（常见为 `netMHCIIpan`），能跑通：  
+   `~/tools/NetMHCIIpan-4.1/netMHCIIpan -h`
+
+> 不追求「装进 conda」；**路径写对**就行。
+
+### 第 3 步：只设 1～2 个环境变量（同一次终端里）
+
+在**要跑 Python 的同一个 WSL 终端**里（路径改成你的）：
+
+```bash
+export NETMHCIIPAN_BIN=$HOME/tools/NetMHCIIpan-4.1/netMHCIIpan
+export NETMHCIIPAN_HOME=$HOME/tools/NetMHCIIpan-4.1
+```
+
+然后进入**仓库根目录**（WSL 里若项目在 `/mnt/d/desktop/immunogen` 之类）再跑：
+
+```bash
+export PYTHONUTF8=1
+python scripts/predict_mhc_ranking.py --run_id 你的run_id --mhc2_backend netmhciipan
+```
+
+**成功时**：屏幕出现 `MHC-II 层: 模式=netmhciipan`；`results/.../peptide_mhc_ranking.csv` 里 **`mhc2_backend` 列为 `netmhciipan`** 且有 `mhc2_el_rank` 等。
+
+---
+
+## 数据上只要多改一处（II 类）
+
+`deliveries/<run_id>/to_immunogen/hla_typing.json` 在原有 `HLA-A/B/C` 外，**至少加**（例）：
+
+```json
+"HLA-DRB1": ["HLA-DRB1*15:01"]
+```
+
+完整多键示例见 `data/examples/hla_typing.class_ii.example.json`。没有 II 类时工具无法选链，会退回代理或报错（取决于 `--mhc2_backend`）。
+
+---
+
+## 想再少记一点时
+
+- **不必记**：其它环境变量可全不设；需要时再查下表。  
+- **只记两个**：`NETMHCIIPAN_BIN` + 多数情况下要 **`NETMHCIIPAN_HOME` = 安装根目录**。
+
+| 变量 | 什么时候要设 |
+|------|----------------|
+| `NETMHCIIPAN_BIN` | 必设：可执行文件完整路径。 |
+| `NETMHCIIPAN_HOME` | 建议设：与解压目录一致；若 `-h` 能跑、预测报找不到数据，**必设**。 |
+| `NETMHCIIPAN_BA=0` | 一般**不设**；只有解析失败、且工具文档说不要 `-BA` 时再设。 |
+| `NETMHCIIPAN_TIMEOUT` | 一般**不设**；肽特别多再加大。 |
+
+---
+
+## 和本仓库代码的对应关系
+
+- 子进程与解析：`scripts/netmhciipan_runner.py`  
+- 排名与开关：`scripts/predict_mhc_ranking.py` 的 `--mhc2_backend`  
+
+**名字对不上、工具报错**时，用 `data/hla_allele_map_netmhciipan.json` 的 `manual_overrides` 改一行，见 `docs/allele_naming_simple.md`。

@@ -1,5 +1,11 @@
 # ImmunoGen Release Notes
 
+## v0.2.4 - 文档：`netmhciipan_setup` 简化为 conda + 三步装 NetMHC
+
+- **`docs/netmhciipan_setup.md`**：区分「不装也能跑」与 WSL 下 **conda + 下载 + 两个环境变量** 的最短路径。
+
+---
+
 ## v0.2.3 - NetMHCIIpan 子进程调用层
 
 - 新增 **`scripts/netmhciipan_runner.py`**：解析 `netMHCIIpan` 4.x 标准输出表头；`NETMHCIIPAN_BIN` / `NETMHCIIPAN_HOME` 等见 **`docs/netmhciipan_setup.md`**。

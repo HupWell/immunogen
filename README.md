@@ -68,7 +68,7 @@ mhcflurry-downloads fetch
 - `hla_typing.json` — **必备** `HLA-A` / `HLA-B` / `HLA-C`；**可选** II 类：`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`（供 NetMHCIIpan 等；OptiType 仅 I 类，II 常由 HLA-HD 等补充）。完整说明与上游映射见 **`docs/hla_typing.md`**，含 II 示例 `data/examples/hla_typing.class_ii.example.json`。
 - `meta.json`（建议含 `case_id`，用于 `to_simhub` 子目录名）
 
-**NetMHCIIpan（MHC-II，可选）**：安装并配置 `NETMHCIIPAN_BIN` 等后，使用 `--mhc2_backend auto`（默认，能跑则跑）或 `netmhciipan`；无工具仍可用 `proxy` 仅跑通。说明见 **`docs/netmhciipan_setup.md`**。
+**NetMHCIIpan（MHC-II，可选）**：不装也能跑（`auto` / `proxy`）。要真 II 类预测：conda 管 Python、工具单独下载，**最简三步**见 **`docs/netmhciipan_setup.md`**（情况 A / 情况 B）。
 
 ---
 
