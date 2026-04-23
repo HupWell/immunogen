@@ -80,6 +80,24 @@ set PYTHONUTF8=1
 python scripts/run_all.py --run_id R_public_001 --top_n 20 --top_k_md 5 --feasibility_top_n 20 --mhc2_backend auto --backend_mhc1_netmhcpan auto --backend_mhc1_bigmhc auto --wi_deepimmuno 1 --wi_prime 1 --wi_repitope 1 --signal_peptide_preset mitd --prepare_structure_inputs --structure_backend coarse
 ```
 
+### 4.1 分段执行（新增 `--target`）
+
+当你只想调某一段时，不必全流程重跑：
+
+```bash
+# 只跑到 MHC 排名（含输入校验、免疫原性适配器、predict_mhc_ranking）
+python scripts/run_all.py --run_id R001 --target mhc_ranking --mhc2_backend proxy
+
+# 只补报告与自证
+python scripts/run_all.py --run_id R001 --target report
+
+# 只封装 SimHub 交付（可配合 --prepare_structure_inputs）
+python scripts/run_all.py --run_id R001 --target simhub --structure_backend coarse
+
+# 只跑可行性验证
+python scripts/run_all.py --run_id R001 --target feasibility --feasibility_top_n 10
+```
+
 ---
 
 ## 5. 分步运行（调试用）
@@ -96,6 +114,7 @@ python scripts/prepare_self_certification.py --run_id R001
 python scripts/prepare_mhc_chain_sequences.py --run_id R001 --strict
 python scripts/prepare_simhub_delivery.py --run_id R001 --top_k 3 --structure_backend coarse
 python scripts/validate_feasibility.py --run_id R001 --top_n 10
+python scripts/check_epitope_realization.py --run_id R001 --require_mhc2_real --require_mhc1_cv_real
 ```
 
 说明（免疫原性真模型）：
@@ -123,13 +142,32 @@ python scripts/validate_feasibility.py --run_id R001 --top_n 10
   - `mhc1_cv_bigmhc_score`（越大越好）
   - `mhc1_cv_source_netmhcpan`、`mhc1_cv_source_bigmhc`
 - 后端参数：`--backend_mhc1_netmhcpan`、`--backend_mhc1_bigmhc`，可选 `auto/real_tsv/real_cmd/off`。
+- 如需“强制实跑验收”，可增加：
+  - `--require_real_mhc2`（要求 MHC-II 必须 netmhciipan）
+  - `--require_real_mhc1_cv`（要求 NetMHCpan/BigMHC 至少一个 real）
 - `real_tsv` 默认读取：
   - `results/<run_id>/tool_outputs/raw/mhc1_netmhcpan.tsv`
   - `results/<run_id>/tool_outputs/raw/mhc1_bigmhc.tsv`
+  - 可直接参考模板：`data/examples/mhc1_cv_templates/mhc1_netmhcpan.tsv`、`data/examples/mhc1_cv_templates/mhc1_bigmhc.tsv`
+- `real_tsv` / `real_cmd` 会触发 `run_all.py` 前置检查：
+  - 设为 `real_tsv` 时，若对应 TSV 缺失会在执行前直接报错；
+  - 设为 `real_cmd` 时，若缺少环境变量 `MHC1_NETMHCPAN_CMD` / `MHC1_BIGMHC_CMD` 会在执行前直接报错。
 - `real_cmd` 通过环境变量命令模板调用（示例）：
   - `MHC1_NETMHCPAN_CMD="python tools/netmhcpan_runner.py --input {input_tsv} --output {output_tsv}"`
   - `MHC1_BIGMHC_CMD="python tools/bigmhc_runner.py --input {input_tsv} --output {output_tsv}"`
   输出 TSV 至少包含 `mut_peptide` 与对应分值列（可带 `hla_allele`）。
+- 结果 CSV 新增汇总列：`mhc1_cv_source`、`mhc1_cv_tool`（便于快速确认是否真接入）。
+- 每次预测会写元数据：
+  - `results/<run_id>/tool_outputs/raw/mhc1_cv_netmhcpan.meta.json`
+  - `results/<run_id>/tool_outputs/raw/mhc1_cv_bigmhc.meta.json`
+- 跑完后可用 `scripts/check_epitope_realization.py` 一条命令验收。
+
+快速验收示例（以 NetMHCpan TSV 为例）：
+
+```bash
+python scripts/run_all.py --run_id R001 --target mhc_ranking --mhc2_backend proxy --backend_mhc1_netmhcpan real_tsv --backend_mhc1_bigmhc off --require_real_mhc1_cv
+python scripts/check_epitope_realization.py --run_id R001 --require_mhc1_cv_real
+```
 
 ---
 

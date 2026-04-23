@@ -172,6 +172,60 @@ def _tool_raw_tsv(run_id: str, tool: str) -> str:
     return os.path.join(base, f"{tool}.tsv")
 
 
+def _tool_meta_json(run_id: str, tool: str) -> str:
+    base = os.path.join("results", run_id, "tool_outputs", "raw")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, f"mhc1_cv_{tool}.meta.json")
+
+
+def _write_mhc1_cv_meta(
+    run_id: str,
+    tool: str,
+    backend_req: str,
+    source_used: str,
+    rows: int,
+    input_rows: int,
+) -> None:
+    """
+    记录交叉验证来源元数据，便于后续定位“为什么是 off/real_*”。
+    """
+    payload = {
+        "run_id": run_id,
+        "tool": tool,
+        "backend_requested": backend_req,
+        "source_used": source_used,
+        "rows": int(rows),
+        "input_rows": int(input_rows),
+        "raw_tsv_path": _tool_raw_tsv(run_id, tool),
+    }
+    with open(_tool_meta_json(run_id, tool), "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def _summarize_mhc1_cv_source(src_netmhcpan: str, src_bigmhc: str) -> str:
+    real_tags = {"real_tsv", "real_cmd"}
+    tags = [x for x in (src_netmhcpan, src_bigmhc) if x in real_tags]
+    if not tags:
+        return "off"
+    if "real_cmd" in tags:
+        return "real_cmd"
+    return "real_tsv"
+
+
+def _summarize_mhc1_cv_tool(cv_n: Any, cv_b: Any, src_netmhcpan: str, src_bigmhc: str) -> str:
+    tools = []
+    if pd.notna(pd.to_numeric(cv_n, errors="coerce")):
+        tools.append("netmhcpan")
+    if pd.notna(pd.to_numeric(cv_b, errors="coerce")):
+        tools.append("bigmhc")
+    if not tools:
+        if src_netmhcpan in {"real_tsv", "real_cmd"}:
+            tools.append("netmhcpan")
+        if src_bigmhc in {"real_tsv", "real_cmd"}:
+            tools.append("bigmhc")
+    return ",".join(tools)
+
+
 def _normalize_mhc1_cv_table(tool: str, raw_df: pd.DataFrame) -> pd.DataFrame:
     """
     统一交叉验证表格式：
@@ -191,7 +245,7 @@ def _normalize_mhc1_cv_table(tool: str, raw_df: pd.DataFrame) -> pd.DataFrame:
         cands = ["mhc1_cv_netmhcpan_nM", "affinity_nM", "affinity", "ic50", "score"]
         metric_col = next((c for c in cands if c in raw_df.columns), None)
         if metric_col is None:
-            raise ValueError("mhc1_netmhcpan 结果缺少亲和力列（affinity_nM/affinity/ic50/score）。")
+            raise ValueError("mhc1_netmhcpan 结果缺少亲和力列（mhc1_cv_netmhcpan_nM/affinity_nM/affinity/ic50/score）。")
         out["mhc1_cv_netmhcpan_nM"] = pd.to_numeric(raw_df[metric_col], errors="coerce")
     elif tool == "mhc1_bigmhc":
         cands = ["mhc1_cv_bigmhc_score", "bigmhc_score", "presentation_score", "score"]
@@ -243,7 +297,7 @@ def _load_mhc1_cv_with_backend(tool: str, run_id: str, backend: str, input_pairs
                 return _normalize_mhc1_cv_table(tool, df), "real_tsv"
             except Exception as e:
                 if b == "real_tsv":
-                    raise
+                    raise RuntimeError(f"{tool} real_tsv 读取失败: {tsv_path}; 原因: {e}") from e
                 print(f"{tool} auto: real_tsv 不可用，回退。原因: {e}")
         elif b == "real_tsv":
             raise FileNotFoundError(tsv_path)
@@ -328,6 +382,8 @@ def main(
     wi_repitope: float = 1.0,
     backend_mhc1_netmhcpan: str = "auto",
     backend_mhc1_bigmhc: str = "auto",
+    require_real_mhc2: bool = False,
+    require_real_mhc1_cv: bool = False,
 ):
     """
     主流程：
@@ -395,8 +451,32 @@ def main(
     )
     n_pair, n_pep = _build_cv_lookup(cv_netmhcpan_df, "mhc1_cv_netmhcpan_nM")
     b_pair, b_pep = _build_cv_lookup(cv_bigmhc_df, "mhc1_cv_bigmhc_score")
+    _write_mhc1_cv_meta(
+        run_id=run_id,
+        tool="netmhcpan",
+        backend_req=backend_mhc1_netmhcpan,
+        source_used=cv_netmhcpan_src,
+        rows=len(cv_netmhcpan_df),
+        input_rows=len(cv_input),
+    )
+    _write_mhc1_cv_meta(
+        run_id=run_id,
+        tool="bigmhc",
+        backend_req=backend_mhc1_bigmhc,
+        source_used=cv_bigmhc_src,
+        rows=len(cv_bigmhc_df),
+        input_rows=len(cv_input),
+    )
     print(f"MHC-I 交叉验证 NetMHCpan: source={cv_netmhcpan_src}, rows={len(cv_netmhcpan_df)}")
     print(f"MHC-I 交叉验证 BigMHC: source={cv_bigmhc_src}, rows={len(cv_bigmhc_df)}")
+    if require_real_mhc2 and mhc2_mode != "netmhciipan":
+        raise RuntimeError(
+            "已启用 --require_real_mhc2，但当前 MHC-II 不是 netmhciipan（可能回退到了 proxy）。"
+        )
+    if require_real_mhc1_cv and (cv_netmhcpan_src not in ("real_tsv", "real_cmd")) and (cv_bigmhc_src not in ("real_tsv", "real_cmd")):
+        raise RuntimeError(
+            "已启用 --require_real_mhc1_cv，但 NetMHCpan/BigMHC 均未使用真实结果（当前 source=off）。"
+        )
 
     # 加载 MHCflurry MHC-I 亲和力模型
     predictor = Class1AffinityPredictor.load()
@@ -421,6 +501,8 @@ def main(
             key = (pep.upper(), str(pr["allele"]))
             cv_n = n_pair.get(key, n_pep.get(pep.upper()))
             cv_b = b_pair.get(key, b_pep.get(pep.upper()))
+            mhc1_cv_source = _summarize_mhc1_cv_source(cv_netmhcpan_src, cv_bigmhc_src)
+            mhc1_cv_tool = _summarize_mhc1_cv_tool(cv_n, cv_b, cv_netmhcpan_src, cv_bigmhc_src)
             lu = mhc2_lookup.get(pep) if mhc2_lookup else None
             if lu and lu.get("mhc2_source") == "netmhciipan" and lu.get("mhc2_el_rank") is not None:
                 m2s = mhc2_score_from_el_rank(lu["mhc2_el_rank"])
@@ -450,6 +532,8 @@ def main(
                 "mhc1_cv_bigmhc_score": cv_b,
                 "mhc1_cv_source_netmhcpan": cv_netmhcpan_src,
                 "mhc1_cv_source_bigmhc": cv_bigmhc_src,
+                "mhc1_cv_source": mhc1_cv_source,
+                "mhc1_cv_tool": mhc1_cv_tool,
                 "mhc2_score": m2s,
                 "mhc2_el_rank": m2el,
                 "mhc2_ba_nm": m2ba,
@@ -507,6 +591,12 @@ def main(
     # utf-8-sig 便于 Windows 下用 Excel 直接打开不乱码
     out.to_csv(out_file, index=False, encoding="utf-8-sig")
     print(f"完成: {out_file}")
+    print(
+        "后端摘要: "
+        f"mhc2_mode={mhc2_mode}, "
+        f"mhc1_netmhcpan_source={cv_netmhcpan_src}, "
+        f"mhc1_bigmhc_source={cv_bigmhc_src}"
+    )
 
 
 if __name__ == "__main__":
@@ -537,6 +627,16 @@ if __name__ == "__main__":
         choices=["auto", "real_tsv", "real_cmd", "off"],
         help="MHC-I 交叉验证 BigMHC 后端：auto/real_tsv/real_cmd/off",
     )
+    parser.add_argument(
+        "--require_real_mhc2",
+        action="store_true",
+        help="要求 MHC-II 必须使用 netmhciipan；若回退 proxy 则直接报错退出。",
+    )
+    parser.add_argument(
+        "--require_real_mhc1_cv",
+        action="store_true",
+        help="要求 NetMHCpan/BigMHC 至少一个使用真实结果（real_tsv/real_cmd）；否则报错。",
+    )
     args = parser.parse_args()
     main(
         args.run_id,
@@ -550,4 +650,6 @@ if __name__ == "__main__":
         wi_repitope=args.wi_repitope,
         backend_mhc1_netmhcpan=args.backend_mhc1_netmhcpan,
         backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
+        require_real_mhc2=args.require_real_mhc2,
+        require_real_mhc1_cv=args.require_real_mhc1_cv,
     )

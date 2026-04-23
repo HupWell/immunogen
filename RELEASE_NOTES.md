@@ -1,5 +1,16 @@
 # ImmunoGen Release Notes
 
+## v0.3.1 - 表位预测“强制实跑”验收能力
+
+- `predict_mhc_ranking.py` 新增：
+  - `--require_real_mhc2`：要求 MHC-II 必须使用 `netmhciipan`
+  - `--require_real_mhc1_cv`：要求 NetMHCpan/BigMHC 至少一个为真实来源
+- `run_all.py` 新增同名透传参数，支持整条流水线强制验收。
+- 新增 `scripts/check_epitope_realization.py`，可对 `peptide_mhc_ranking.csv` 做后端真实性检查。
+- `README.md` 与 `docs/TODO.md` 同步更新为“可强制实跑、可一键验收”的操作路径。
+
+---
+
 ## v0.3.0 - MHC-I 交叉验证列接入（NetMHCpan / BigMHC）
 
 - `predict_mhc_ranking.py` 新增 MHC-I 交叉验证后端参数：

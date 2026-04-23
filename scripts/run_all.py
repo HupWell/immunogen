@@ -26,6 +26,30 @@ def run_step(command: list):
         raise RuntimeError(f"步骤执行失败，退出码: {result.returncode}")
 
 
+def _preflight_mhc1_backend(run_id: str, backend_netmhcpan: str, backend_bigmhc: str):
+    """
+    在执行 predict_mhc_ranking 前做 MHC-I 交叉验证后端检查，尽早给出可读错误。
+    """
+    raw_dir = os.path.join("results", run_id, "tool_outputs", "raw")
+    checks = [
+        ("mhc1_netmhcpan", backend_netmhcpan, "MHC1_NETMHCPAN_CMD"),
+        ("mhc1_bigmhc", backend_bigmhc, "MHC1_BIGMHC_CMD"),
+    ]
+    for tool, backend, env_key in checks:
+        b = (backend or "").strip().lower()
+        if b == "real_tsv":
+            tsv_path = os.path.join(raw_dir, f"{tool}.tsv")
+            if not os.path.exists(tsv_path):
+                raise FileNotFoundError(
+                    f"{tool} 后端设为 real_tsv，但未找到文件: {tsv_path}"
+                )
+        elif b == "real_cmd":
+            if not os.environ.get(env_key, "").strip():
+                raise RuntimeError(
+                    f"{tool} 后端设为 real_cmd，但未设置环境变量 {env_key}"
+                )
+
+
 def main(
     run_id: str,
     top_n: int,
@@ -50,9 +74,12 @@ def main(
     wi_repitope: float,
     backend_mhc1_netmhcpan: str,
     backend_mhc1_bigmhc: str,
+    require_real_mhc2: bool,
+    require_real_mhc1_cv: bool,
     backend_deepimmuno: str,
     backend_prime: str,
     backend_repitope: str,
+    target: str,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -94,6 +121,10 @@ def main(
         "--backend_mhc1_bigmhc",
         backend_mhc1_bigmhc,
     ]
+    if require_real_mhc2:
+        step3.append("--require_real_mhc2")
+    if require_real_mhc1_cv:
+        step3.append("--require_real_mhc1_cv")
     step4 = [
         python_exe,
         os.path.join(scripts_dir, "select_top_peptides.py"),
@@ -167,19 +198,26 @@ def main(
         str(feasibility_top_n),
     ]
 
-    print("开始执行 ImmunoGen MVP 全流程...")
-    run_step(step1)
-    run_step(step2)
-    run_step(step3)
-    run_step(step4)
-    run_step(step5)
-    run_step(step6)
-    run_step(step7)
-    if prepare_structure_inputs:
-        run_step(step8_1)
-    run_step(step8)
-    run_step(step9)
-    print("\n全部步骤执行完成。")
+    if require_real_mhc1_cv and backend_mhc1_netmhcpan == "off" and backend_mhc1_bigmhc == "off":
+        raise RuntimeError("已启用 --require_real_mhc1_cv，但两个 MHC-I 交叉验证后端均为 off。")
+
+    pipelines = {
+        "full": [step1, step2, step3, step4, step5, step6, step7, step8, step9],
+        "mhc_ranking": [step1, step2, step3],
+        "report": [step6, step7],
+        "simhub": [step8],
+        "feasibility": [step9],
+    }
+    selected = pipelines[target]
+
+    print(f"开始执行 ImmunoGen 流程（target={target}）...")
+    if step3 in selected:
+        _preflight_mhc1_backend(run_id, backend_mhc1_netmhcpan, backend_mhc1_bigmhc)
+    for step in selected:
+        if step is step8 and prepare_structure_inputs:
+            run_step(step8_1)
+        run_step(step)
+    print("\n所选步骤执行完成。")
 
 
 if __name__ == "__main__":
@@ -241,6 +279,8 @@ if __name__ == "__main__":
         choices=["auto", "real_tsv", "real_cmd", "off"],
         help="MHC-I 交叉验证 BigMHC 后端",
     )
+    parser.add_argument("--require_real_mhc2", action="store_true", help="要求 MHC-II 必须 real（netmhciipan）")
+    parser.add_argument("--require_real_mhc1_cv", action="store_true", help="要求 MHC-I 交叉验证至少一个 real")
     parser.add_argument(
         "--backend_deepimmuno",
         default="auto",
@@ -258,6 +298,12 @@ if __name__ == "__main__":
         default="auto",
         choices=["auto", "real_tsv", "real_cmd", "proxy"],
         help="Repitope 适配器后端",
+    )
+    parser.add_argument(
+        "--target",
+        default="full",
+        choices=["full", "mhc_ranking", "report", "simhub", "feasibility"],
+        help="执行范围：full=全流程；mhc_ranking=到表位排名；report=仅报告/自证；simhub=仅交付封装；feasibility=仅可行性。",
     )
     args = parser.parse_args()
 
@@ -285,7 +331,10 @@ if __name__ == "__main__":
         wi_repitope=args.wi_repitope,
         backend_mhc1_netmhcpan=args.backend_mhc1_netmhcpan,
         backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
+        require_real_mhc2=args.require_real_mhc2,
+        require_real_mhc1_cv=args.require_real_mhc1_cv,
         backend_deepimmuno=args.backend_deepimmuno,
         backend_prime=args.backend_prime,
         backend_repitope=args.backend_repitope,
+        target=args.target,
     )
