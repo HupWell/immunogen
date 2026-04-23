@@ -50,6 +50,20 @@ def _preflight_mhc1_backend(run_id: str, backend_netmhcpan: str, backend_bigmhc:
                 )
 
 
+def _preflight_mhc2_backend(run_id: str, mhc2_backend: str):
+    """
+    在执行 predict_mhc_ranking 前做 MHC-II 后端检查（仅 real_tsv 需要本地文件）。
+    """
+    b = (mhc2_backend or "").strip().lower()
+    if b != "real_tsv":
+        return
+    tsv_path = os.path.join("results", run_id, "tool_outputs", "raw", "mhc2_netmhciipan.tsv")
+    if not os.path.exists(tsv_path):
+        raise FileNotFoundError(
+            f"mhc2_backend 设为 real_tsv，但未找到文件: {tsv_path}"
+        )
+
+
 def main(
     run_id: str,
     top_n: int,
@@ -213,6 +227,7 @@ def main(
     print(f"开始执行 ImmunoGen 流程（target={target}）...")
     if step3 in selected:
         _preflight_mhc1_backend(run_id, backend_mhc1_netmhcpan, backend_mhc1_bigmhc)
+        _preflight_mhc2_backend(run_id, mhc2_backend)
     for step in selected:
         if step is step8 and prepare_structure_inputs:
             run_step(step8_1)
@@ -261,8 +276,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mhc2_backend",
         default="auto",
-        choices=["auto", "proxy", "netmhciipan"],
-        help="MHC-II：auto=有 NetMHCIIpan 与 II 分型则实跑否则代理；见 predict_mhc_ranking 说明。",
+        choices=["auto", "proxy", "real_tsv", "netmhciipan"],
+        help="MHC-II：auto=优先 netmhciipan，其次 real_tsv，最后 proxy；real_tsv 读取 results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv。",
     )
     parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
     parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")

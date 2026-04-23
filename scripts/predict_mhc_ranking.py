@@ -337,6 +337,7 @@ def _build_cv_lookup(cv_df: pd.DataFrame, metric_col: str) -> Tuple[Dict[Tuple[s
 
 
 def _prepare_mhc2_lookup(
+    run_id: str,
     hla_json: dict,
     candidate_peptides: list,
     mhc2_backend: str,
@@ -345,11 +346,54 @@ def _prepare_mhc2_lookup(
     按 backend 预计算 (peptide->NetMHCIIpan 行, 或 None)；返回 (lookup 或 None, 实际模式说明)。
     auto：能调用真实工具且 hla 含可转换的 II 类时尝试，否则 None（下游用 proxy）。
     """
+    def _load_mhc2_real_tsv(_run_id: str) -> Optional[Dict[str, Any]]:
+        """
+        读取预计算的 NetMHCIIpan 结果，便于在无二进制环境下也保持真实来源常态化。
+        约定路径：results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv
+        """
+        tsv_path = os.path.join("results", _run_id, "tool_outputs", "raw", "mhc2_netmhciipan.tsv")
+        if not os.path.exists(tsv_path):
+            return None
+        df_tsv = pd.read_csv(tsv_path, sep="\t")
+        if "mut_peptide" not in df_tsv.columns:
+            raise ValueError(f"mhc2 real_tsv 缺少 mut_peptide 列: {tsv_path}")
+        rank_col = None
+        for c in ("mhc2_el_rank", "el_rank", "pct_rank_el", "rank"):
+            if c in df_tsv.columns:
+                rank_col = c
+                break
+        if rank_col is None:
+            raise ValueError(f"mhc2 real_tsv 缺少 EL 排名列（mhc2_el_rank/el_rank/pct_rank_el/rank）: {tsv_path}")
+        ba_col = "mhc2_ba_nm" if "mhc2_ba_nm" in df_tsv.columns else ("ba_nm" if "ba_nm" in df_tsv.columns else None)
+        allele_col = None
+        for c in ("mhc2_class2_allele", "mhc2_allele", "allele", "hla_allele"):
+            if c in df_tsv.columns:
+                allele_col = c
+                break
+        lookup: Dict[str, Any] = {}
+        for _, row in df_tsv.iterrows():
+            pep = str(row.get("mut_peptide", "")).strip().upper()
+            if not pep:
+                continue
+            if pep not in {str(x).strip().upper() for x in candidate_peptides}:
+                continue
+            el_rank = pd.to_numeric(row.get(rank_col), errors="coerce")
+            if pd.isna(el_rank):
+                continue
+            ba_nm = pd.to_numeric(row.get(ba_col), errors="coerce") if ba_col else np.nan
+            lookup[pep] = {
+                "mhc2_source": "netmhciipan_tsv",
+                "mhc2_el_rank": float(el_rank),
+                "mhc2_ba_nm": (None if pd.isna(ba_nm) else float(ba_nm)),
+                "mhc2_allele": (str(row.get(allele_col, "")).strip() if allele_col else ""),
+            }
+        return lookup or None
+
     b = mhc2_backend.lower().strip()
     if b == "proxy":
         return None, "proxy"
-    if b not in ("auto", "netmhciipan"):
-        raise ValueError("mhc2_backend 须为 auto / proxy / netmhciipan")
+    if b not in ("auto", "real_tsv", "netmhciipan"):
+        raise ValueError("mhc2_backend 须为 auto / proxy / real_tsv / netmhciipan")
 
     if b == "netmhciipan":
         if not resolve_netmhciipan_bin():
@@ -361,12 +405,24 @@ def _prepare_mhc2_lookup(
             raise RuntimeError(f"NetMHCIIpan 未得到可用结果: {st}")
         return lu, "netmhciipan"
 
+    if b == "real_tsv":
+        lu = _load_mhc2_real_tsv(run_id)
+        if not lu:
+            raise FileNotFoundError(
+                f"mhc2_backend=real_tsv 但未找到或未解析到可用结果: results/{run_id}/tool_outputs/raw/mhc2_netmhciipan.tsv"
+            )
+        return lu, "netmhciipan"
+
     # auto
     if resolve_netmhciipan_bin() and collect_netmhcii_alleles(hla_json):
         lu, st = build_peptide_mhc2_lookup(hla_json, candidate_peptides)
         if st == "ok" and lu:
             return lu, "netmhciipan"
         print(f"NetMHCIIpan（auto）未使用，将回退 proxy。原因: {st}")
+    # auto 下优先尝试真实 TSV 回填，避免长期 proxy
+    lu = _load_mhc2_real_tsv(run_id)
+    if lu:
+        return lu, "netmhciipan"
     return None, "proxy"
 
 
@@ -432,7 +488,7 @@ def main(
         if 8 <= len(p0) <= 14 and len(p0) >= 9:
             cands_mhc2.append(p0)
     cands_mhc2 = list(dict.fromkeys(cands_mhc2))
-    mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(hla_json, cands_mhc2, mhc2_backend)
+    mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(run_id, hla_json, cands_mhc2, mhc2_backend)
     print(f"MHC-II 层: 模式={mhc2_mode}，查表条目数={len(mhc2_lookup) if mhc2_lookup else 0}")
     precomputed_immuno = load_precomputed_immunogenicity(run_id)
     print(f"免疫原性预计算表: 命中肽数={len(precomputed_immuno)}（缺失时自动回退 proxy）")
@@ -504,7 +560,7 @@ def main(
             mhc1_cv_source = _summarize_mhc1_cv_source(cv_netmhcpan_src, cv_bigmhc_src)
             mhc1_cv_tool = _summarize_mhc1_cv_tool(cv_n, cv_b, cv_netmhcpan_src, cv_bigmhc_src)
             lu = mhc2_lookup.get(pep) if mhc2_lookup else None
-            if lu and lu.get("mhc2_source") == "netmhciipan" and lu.get("mhc2_el_rank") is not None:
+            if lu and lu.get("mhc2_source") in ("netmhciipan", "netmhciipan_tsv") and lu.get("mhc2_el_rank") is not None:
                 m2s = mhc2_score_from_el_rank(lu["mhc2_el_rank"])
                 m2src = "netmhciipan"
                 m2el = lu.get("mhc2_el_rank")
@@ -612,8 +668,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mhc2_backend",
         default="auto",
-        choices=["auto", "proxy", "netmhciipan"],
-        help="MHC-II 层: auto=有工具与 II 等位则 NetMHCIIpan 否则代理; proxy=仅代理; netmhciipan=强制（失败则报错）",
+        choices=["auto", "proxy", "real_tsv", "netmhciipan"],
+        help="MHC-II 层: auto=优先 netmhciipan，其次 real_tsv，最后 proxy；real_tsv=读取 results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv",
     )
     parser.add_argument(
         "--backend_mhc1_netmhcpan",
