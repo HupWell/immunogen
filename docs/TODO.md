@@ -1,104 +1,123 @@
-# ImmunoGen 后续完善清单（TODO）
+# ImmunoGen 任务书对照 TODO（白话版）
 
-本文档对应任务书中**尚未在主线代码中完全落地**的能力，便于排期与分工。当前 MVP 仍以 MHCflurry（MHC-I）、代理 MHC-II、代理免疫原性、粗粒度 `complex.pdb` 为主；见 `SELF_CHECK.md`、`RELEASE_NOTES.md`。
-
----
-
-## 优先级说明
-
-- **P0**：对排名/交付质量影响大、接口相对明确  
-- **P1**：增强可解释性与 SimHub 可信度  
-- **P2**：设计扩展与文档级能力  
-
-建议实施顺序：**P0 MHC-II 真实工具 → P1 结构后端 → P0 免疫原性（择一先接）→ P2 信号肽配置 → P2 LNP 文档**。
+> 这份清单按任务书逐条对照，分成：  
+> - ✅ 已完成（可直接用）  
+> - 🟡 部分完成（框架有了，但真实工具/真实数据还没完全接上）  
+> - ⬜ 未完成（后续迭代）
 
 ---
 
-## P0：MHC-II — NetMHCIIpan
+## 1) 当前结论（先看这个）
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | 在 `hla_typing.json` 契约中明确 **II 类等位基因**（`HLA-DRB1`、`HLA-DQA1`、`HLA-DQB1`、`HLA-DPA1`、`HLA-DPB1`）及与 OptiType/HLA-HD 的字段映射 → **`docs/hla_typing.md`** + `data/examples/hla_typing.class_ii.example.json` + `scripts/hla_typing_spec.py` + `validate_input.py` |
-| [x] | 维护 **等位基因名称映射表**（JSON，YAML 可用同结构）：BioDriver/契约 → NetMHCIIpan → `data/hla_allele_map_netmhciipan.json` + `scripts/hla_allele_to_netmhciipan.py`；白话说明 **`docs/allele_naming_simple.md`**，契约仍见 **`docs/hla_typing.md`** |
-| [x] | 实现 **NetMHCIIpan 调用层** → `scripts/netmhciipan_runner.py`（`subprocess`，环境变量见 `docs/netmhciipan_setup.md`） |
-| [x] | 批处理：同一次调用写入肽列表、`-a` 多个等位基因；**stdout 表**解析后并入 `peptide_mhc_ranking.csv`（`mhc2_el_rank` / `mhc2_ba_nm` 等；EL %Rank 优于 IC50 时以 rank 主转 `mhc2_score`） |
-| [x] | `predict_mhc_ranking.py` / `run_all.py`：`--mhc2_backend auto|proxy|netmhciipan`；**auto** 在缺可执行/无 II 类时回退 `mhc2_proxy_score` |
-| [x] | `prepare_self_certification.py` 根据 `mhc2_backend` 列更新 **SELF_CHECK** 中 MHC-II 说明；版本/命令以环境为准，见 `netmhciipan_setup.md` |
-
-**相关代码：** `scripts/predict_mhc_ranking.py` 中 `mhc2_proxy_score()`。
+- ✅ 主流程已经能完整跑通：输入校验 → 排名 → Top 筛选 → mRNA 设计 → 报告/自证 → SimHub 交付。
+- ✅ `R001`、`R002`、`R003`、`R_public_001` 都已产出完整结果目录。
+- 🟡 多个“真实外部工具”还在“可选接入 + 自动回退”状态（不是默认强制实跑）。
+- ✅ 已按任务书要求明确：peptide-MHC 分支禁止 SDF，交付 `complex.pdb`（M/B/P 链）。
+- ✅ 已核对 `R_public_001`：`results` 三件套和 `to_simhub/public_case_001` 契约文件齐全，`molecule_type=peptide_mhc` 且无 `ligand.sdf`。
 
 ---
 
-## P0：免疫原性 — DeepImmuno / PRIME / Repitope
+## 2) 任务书逐项对照
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | 统一 **输出列契约**：`immunogenicity_deepimmuno`、`immunogenicity_prime`、`immunogenicity_repitope`、综合列 `immunogenicity`；加权支持 `predict_mhc_ranking.py --wi_deepimmuno/--wi_prime/--wi_repitope`（保留旧列别名兼容历史流程） |
-| [x] | 采用 **适配器 + 预计算表** 策略：新增独立脚本 `run_deepimmuno_adapter.py` / `run_prime_adapter.py` / `run_repitope_adapter.py`（批量入口 `run_immunogenicity_adapters.py`），输出 `results/<run_id>/tool_outputs/*.tsv`；`predict_mhc_ranking.py` 按 `run_id` 自动 merge，缺失回退 proxy |
-| [x] | **DeepImmuno**：封装可选真模型 runner（`real_tsv` / `real_cmd` / `proxy`），命令失败自动回退（`auto`） |
-| [x] | **PRIME**：同样支持可选真模型 runner（`real_tsv` / `real_cmd` / `proxy`） |
-| [x] | **Repitope**：同上 |
-| [x] | `predict_mhc_ranking.py`：预计算文件优先 merge，缺失回退 `deepimmuno_proxy` / `prime_proxy` / `repitope_proxy` |
-| [x] | 文档与自证：`SELF_CHECK.md` 增加 `immunogenicity_source_*` 统计，标明真模型/proxy 来源 |
+### 2.1 输入契约（BioDriver 输入）
 
-**相关代码：** `scripts/predict_mhc_ranking.py` 中 `deepimmuno_proxy`、`prime_proxy`、`repitope_proxy` 及 `rank_score` 组合逻辑。
+- ✅ 已完成  
+  - `neoantigen_candidates.csv` / `hla_typing.json` / `meta.json` 输入契约已落地并校验。
+  - II 类 HLA 字段（DRB1/DQA1/DQB1/DPA1/DPB1）已纳入契约说明与示例。
 
----
+### 2.2 表位预测与排序
 
-## P1：Simulation Hub — 真实 peptide-MHC 结构（AlphaFold-Multimer / PANDORA）
+- ✅ 已完成（可用）  
+  - MHC-I 主预测：`MHCflurry`。
+  - 综合排序：`rank_score = w1*HLA + w2*immunogenicity + w3*VAF + w4*dissimilarity`。
+  - 已做与 WT 过于相似的过滤（`select_top_peptides.py`）。
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | 从 **IPD IMGT/HLA** 或内部序列表，按分型拉取 **MHC-I α 链 + β2m** 氨基酸序列（数据管线，非单次硬编码） |
-| [x] | 评估 **PANDORA** vs **ColabFold/AlphaFold-Multimer** 二选一或组合（模板可用性、许可、批量耗时） |
-| [x] | 实现独立步骤或 CLI 标志：`prepare_simhub_delivery.py --structure_backend pandora|afm|coarse`，**默认 coarse** 保证无依赖可跑 |
-| [x] | 将工具输出 PDB **整理为契约链 ID**：Chain **M**（α）、**B**（β2m）、**P**（peptide）；写入 `deliveries/.../complex.pdb` |
-| [x] | 在 `meta.json` 中增加 `structure_source`、`structure_tool_version`、`replaces_coarse` 等字段便于 SimHub 与审计 |
-| [x] | CI/文档：说明 GPU/队列要求，避免默认绑进 `run_all.py` 长耗时步骤 |
+- ✅ 已完成（可验收）  
+  - 已增加“强制实跑”开关：`--require_real_mhc2`、`--require_real_mhc1_cv`。  
+  - 已增加验收脚本：`scripts/check_epitope_realization.py`（可一键检查 MHC-II/MHC-I 是否真实后端）。
+  - 说明：如果你的环境未接好真实工具，这些强制参数会直接报错，避免“看起来跑通但其实是回退 proxy/off”。
 
-**相关代码：** `scripts/prepare_simhub_delivery.py` 中 `write_complex_pdb()`。
+### 2.3 免疫原性（DeepImmuno/PRIME/Repitope）
 
----
+- ✅ 已完成（工程框架）  
+  - 三个工具都支持 `auto/real_tsv/real_cmd/proxy`。
+  - 输出列与来源追踪列已统一。
 
-## P2：多价 ORF — 信号肽 / 跨膜（可选）
+- 🟡 部分完成（真实模型层面）  
+  - 当前大多数实例仍以 `proxy` 或公开数据映射为主，不等于你本地已部署完整真模型推理链。
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | 在 `mrna_design.json` 中增加字段：`signal_peptide_aa`、`tm_domain_aa`（可选）、`multivalent_core_aa`、`linker` |
-| [x] | `build_multivalent_mrna.py`：支持 CLI 或 JSON 配置 **N 端信号肽**（如 MITD / 经典分泌肽预设名）、**C 端可选 TM** |
-| [x] | 保持氨基酸顺序文档化：`[signal][pep1][linker][pep2]...[TM?]` → 再密码子化与 UTR 拼接 |
-| [x] | `REPORT.md` 模板中简述选择信号肽的 **免疫学/表达** 依据（引用即可，不必过长） |
+### 2.4 多价 ORF + mRNA 设计
 
-**相关代码：** `scripts/build_multivalent_mrna.py`。
+- ✅ 已完成（MVP可交付）  
+  - Top 肽串联、linker、UTR、polyA、密码子模式（`basic/optimized/lineardesign`）已支持。
+  - 可选信号肽/TM 参数已支持并写入 `mrna_design.json`。
+  - 二级结构图和基础 QC 已输出。
 
----
+- ⬜ 未完成（任务书“更真实工具”层面）  
+  - `LinearDesign/COOL` 真正生产级接入与严格回归验证仍待做。
+  - Saluki / RNAsnp 稳定性接入还未做。
 
-## P2：LNP 与递送（第一阶段以文档为主）
+### 2.5 SimHub 交付
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | 在 `REPORT.md` 或独立 `docs/lnp_notes.md` 中固定 **综述级** 说明（如 SM-102、ALC-0315），明确「本仓库不生成 LNP 处方」 |
-| [x] | 若第二阶段需要结构化：新增 `lnp_formulation.json` 模板，与序列流水线 **解耦** |
+- ✅ 已完成（契约层）  
+  - 交付目录、`complex.pdb` / `hla_allele.txt` / `meta.json` / `selected_for_md.csv` 已落地。
+  - `prepare_simhub_delivery.py` 支持 `coarse/pandora/afm`，并记录结构来源元数据。
+  - 链 ID 契约（M/B/P）已处理。
 
----
+- 🟡 部分完成（真实结构层）  
+  - 默认仍是 `coarse` 可跑通模式。
+  - PANDORA/AFM 的真实批量建模与稳定评估（RMSD/H-bond/ΔG）还需你实际环境继续做。
 
-## P2：其他工具链（任务书提及、当前为占位或简化）
+### 2.6 自证最小包与验收
 
-| 状态 | 事项 |
-| :---: | --- |
-| [x] | **MHC-I**：可选接入 NetMHCpan-4.1 / BigMHC，与 MHCflurry **交叉验证**列写入 `peptide_mhc_ranking.csv` |
-| [ ] | **密码子优化**：对接 LinearDesign / COOL 等外部工具时，保留现有 `basic` / `optimized` / `lineardesign` 模式语义与回退 |
-| [x] | **IEDB**：表位相关资源以链接或导出步骤形式写入 `SELF_CHECK.md` / 操作手册（非必须自动化） |
-| [ ] | **mRNA 稳定性**：可选 Saluki / RNAsnp，结果进入 `qc_metrics.json` 与图表说明 |
+- ✅ 已完成  
+  - `POSITIVE_CONTROL.md`、`SELF_CHECK.md`、`REPORT.md` 自动生成已落地。
+  - IEDB 资源入口已写入 `SELF_CHECK`。
 
 ---
 
-## 验收提醒（每完成一大项）
+## 3) 目前最关键“未完全落地”项（按优先级）
 
-- [x] 更新 `RELEASE_NOTES.md` 版本说明  
-- [x] 更新 `SELF_CHECK.md` / `prepare_self_certification.py` 中阈值与工具记录  
-- [ ] 在干净环境中按 `README.md` 跑通至少一个 `run_id`（含 `--help` 与新参数说明）  
+### P0（优先先做）
+
+1. 🟡 让 MHC-I 交叉验证真正“有值”  
+   - 目标：`mhc1_cv_source_netmhcpan` / `mhc1_cv_source_bigmhc` 从 `off` 变成 `real_cmd` 或 `real_tsv`。
+   - 现状：框架已完善（含 `run_all --target mhc_ranking`、前置校验、`mhc1_cv_source`/`mhc1_cv_tool` 汇总列、meta.json），但真实命令/真实结果文件仍待接入。
+
+2. 🟡 让 MHC-II 在真实数据上真正跑 NetMHCIIpan  
+   - 目标：`mhc2_backend` 在真实病例里出现 `netmhciipan`，不是长期 `proxy`。
+
+3. 🟡 免疫原性从 proxy 逐步迁移到真模型  
+   - 目标：`immunogenicity_source_*` 尽量由 `proxy` 转为 `real_tsv/real_cmd`。
+
+### P1
+
+4. 🟡 真实结构建模批量化（PANDORA/AFM）  
+   - 目标：`coarse` 仅用于联调，关键交付案例换成真实 `complex.pdb`。
+
+### P2
+
+5. ⬜ 生产级密码子优化工具接入与评估（LinearDesign/COOL）。  
+6. ⬜ mRNA 稳定性（Saluki/RNAsnp）接入 `qc_metrics.json` 和报告。  
 
 ---
 
-*最后更新：与任务书「尚未完全落地」章节对齐，随实现进度勾选并修订。*
+## 4) 下一步执行清单（简单版）
+
+- [ ] 在远程环境配置 `MHC1_NETMHCPAN_CMD` / `MHC1_BIGMHC_CMD`，或准备 `results/<run_id>/tool_outputs/raw/mhc1_*.tsv`，让交叉验证列不再是 `off`。  
+- [ ] 在一个真实 `run_id` 上使用 `--mhc2_backend netmhciipan --require_real_mhc2 --require_real_mhc1_cv` 跑通。  
+- [ ] 选择一个免疫原性工具先从 `proxy` 升级到 `real_tsv`（建议 DeepImmuno 先行）。  
+- [ ] 选 Top 3-5 候选跑 PANDORA/AFM，替换 `coarse` 结构再交 SimHub。  
+- [ ] 为 `R_public_001` 增加“阳性对照未命中 KRAS 时的替代阳性证据”说明（当前 `POSITIVE_CONTROL.md` 显示 KRAS 未命中）。  
+
+建议最短路径（先打通 MHC-I）：
+- [ ] `python scripts/run_all.py --run_id R001 --target mhc_ranking --mhc2_backend proxy --backend_mhc1_netmhcpan real_tsv --backend_mhc1_bigmhc off --require_real_mhc1_cv`
+- [ ] `python scripts/check_epitope_realization.py --run_id R001 --require_mhc1_cv_real`
+
+---
+
+## 5) 说明
+
+- 本清单以当前仓库和最近实跑日志为准，不按“是否有接口”而按“是否真的跑出真实工具结果”来区分完成度。
+- 每完成一项，请同步更新：`RELEASE_NOTES.md`、`SELF_CHECK.md`、本文件。
+- 本次文档核对时间：`2026-04-23`（远程服务器会话）。
