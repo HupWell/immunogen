@@ -90,6 +90,64 @@ python scripts/run_all.py --run_id R001 --target mhc_ranking --backend_mhc1_netm
 python scripts/check_epitope_realization.py --run_id R001 --require_mhc1_cv_real --require_mhc2_real
 ```
 
+MHC-I **`real_cmd`（本机 netMHCpan 自动跑，不写死 TSV）**：
+
+```bash
+# 依赖：已安装 NetMHCpan 4.x，并可从当前环境调用（或设 NETMHCPAN_BIN / NETMHCPAN_HOME）
+export MHC1_NETMHCPAN_CMD='python tools/netmhcpan_class1_runner.py --input {input_tsv} --output {output_tsv}'
+
+python scripts/run_all.py --run_id R001 --target mhc_ranking \
+  --backend_mhc1_netmhcpan real_cmd --backend_mhc1_bigmhc off \
+  --mhc2_backend real_tsv --require_real_mhc1_cv --require_real_mhc2 \
+  --backend_prime real_tsv --backend_repitope real_tsv \
+  --require_real_immunogenicity_prime --require_real_immunogenicity_repitope
+```
+
+说明：若未提供 `results/<run_id>/tool_outputs/raw/prime.tsv` 或 `repitope.tsv`（或未配置对应 `real_cmd`），上述两个 `require_real_immunogenicity_*` 会阻止流程回退 proxy，并直接报错，确保 PRIME/Repitope 为真实来源。
+
+说明：`predict_mhc_ranking` 会生成临时 `mhc1_netmhcpan_input.tsv` 并调用上述命令；包装器见 `tools/netmhcpan_class1_runner.py`。包装器**默认**为 NetMHCpan 4.2+ 追加 **`-BA`** 以得到 `Aff(nM)` 亲合力列；环境变量见 `NETMHCPAN_LEN`、`NETMHCPAN_EXTRA`、`NETMHCPAN_TIMEOUT`、`NETMHCPAN_BA`（设 `0` 可禁用 `-BA`，但表头常无 nM 会导致解析失败）。快速加载： `source scripts/env_netmhcpan.sh`（请按本机修改其中 `NETMHCPAN_HOME`）。
+
+MHC-I **BigMHC `real_cmd`（KarchinLab [BigMHC](https://github.com/KarchinLab/bigmhc)，可选增强，默认不启用）**：
+
+> 说明：BigMHC 不是流程必需项。当前推荐仅启用 NetMHCpan 作为 MHC-I 真实后端，BigMHC 可在网络与环境稳定后再补充为第二路交叉验证。
+
+推荐（默认关闭 BigMHC，不阻塞主流程）：
+
+```bash
+python scripts/run_all.py --run_id R001 --target mhc_ranking \
+  --backend_mhc1_netmhcpan real_cmd --backend_mhc1_bigmhc off \
+  --mhc2_backend real_tsv --require_real_mhc1_cv --require_real_mhc2
+```
+
+可选增强（启用 BigMHC 第二路）：
+
+```bash
+# 1) 克隆官方仓库（体积大，约数 GB），按官方 README 安装 PyTorch 等依赖
+# 2) 设仓库根目录（其下含 src/predict.py），或显式指定 predict.py
+export BIGMHC_HOME="/path/to/bigmhc"
+export MHC1_BIGMHC_CMD='python tools/bigmhc_runner.py --input {input_tsv} --output {output_tsv}'
+
+python scripts/run_all.py --run_id R001 --target mhc_ranking \
+  --backend_mhc1_netmhcpan real_tsv --backend_mhc1_bigmhc real_cmd \
+  --mhc2_backend real_tsv --require_real_mhc1_cv --require_real_mhc2
+```
+
+包装器见 `tools/bigmhc_runner.py`：内部调用 `predict.py -m=el`（呈递 EL 模型），把 `BigMHC_EL` 列映射为 `mhc1_cv_bigmhc_score`。可选：`BIGMHC_MODEL`（默认 `el`）、`BIGMHC_DEVICE`（默认 `cpu`）、`BIGMHC_PREDICT_PY`（覆盖 `predict.py` 路径）。
+
+多实例（`R002` / `R003` / `R_public_001` 等）在跑 `--backend_mhc1_netmhcpan real_tsv` 前，都需在**对应**目录放置两份表：
+
+- `results/<run_id>/tool_outputs/raw/mhc1_netmhcpan.tsv`（I 类交叉验证；行数应覆盖本 run 的候选肽 × 病人 I 类 allele，至少肽级有值）
+- `results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv`（II 类；`hla_typing.json` 里暂无 II 类时可用参考 `DRB1*15:01` 等**演示**用途，终版需换患者真实分型结果）
+
+预检 + 可选自动跑数与验收：
+
+```bash
+python scripts/bootstrap_real_backends.py --run_id R002 --with_mhc2
+python scripts/bootstrap_real_backends.py --run_id R002 --with_mhc2 --run --validate
+```
+
+I 类表亦可从外部分析经 `scripts/openvax_bridge.py` 等生成；最小列模板见 `data/examples/mhc1_cv_templates/mhc1_netmhcpan.tsv`。
+
 ---
 
 ## 3. 建议执行步骤（任务书对齐）
@@ -127,5 +185,6 @@ python scripts/check_epitope_realization.py --run_id R001 --require_mhc1_cv_real
 - `docs/hla_typing.md`
 - `docs/netmhciipan_setup.md`
 - `docs/structure_backend_selection.md`
+- `docs/WEEKLY_REPORT_2026-04-24.md`
 - `docs/TODO.md`
 - `FINAL_CHECKLIST.md`

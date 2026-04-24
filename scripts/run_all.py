@@ -64,6 +64,25 @@ def _preflight_mhc2_backend(run_id: str, mhc2_backend: str):
         )
 
 
+def _preflight_immunogenicity_backend(run_id: str, backend: str, tool: str):
+    """
+    在执行 run_immunogenicity_adapters 前做免疫原性后端检查。
+    """
+    b = (backend or "").strip().lower()
+    if b == "real_tsv":
+        tsv_path = os.path.join("results", run_id, "tool_outputs", "raw", f"{tool}.tsv")
+        if not os.path.exists(tsv_path):
+            raise FileNotFoundError(
+                f"{tool} 后端设为 real_tsv，但未找到文件: {tsv_path}"
+            )
+    elif b == "real_cmd":
+        env_key = f"IMMUNO_{tool.upper()}_CMD"
+        if not os.environ.get(env_key, "").strip():
+            raise RuntimeError(
+                f"{tool} 后端设为 real_cmd，但未设置环境变量 {env_key}"
+            )
+
+
 def main(
     run_id: str,
     top_n: int,
@@ -93,6 +112,8 @@ def main(
     backend_deepimmuno: str,
     backend_prime: str,
     backend_repitope: str,
+    require_real_immunogenicity_prime: bool,
+    require_real_immunogenicity_repitope: bool,
     target: str,
 ):
     """按固定顺序执行全流程。"""
@@ -139,6 +160,10 @@ def main(
         step3.append("--require_real_mhc2")
     if require_real_mhc1_cv:
         step3.append("--require_real_mhc1_cv")
+    if require_real_immunogenicity_prime:
+        step3.append("--require_real_immunogenicity_prime")
+    if require_real_immunogenicity_repitope:
+        step3.append("--require_real_immunogenicity_repitope")
     step4 = [
         python_exe,
         os.path.join(scripts_dir, "select_top_peptides.py"),
@@ -225,6 +250,10 @@ def main(
     selected = pipelines[target]
 
     print(f"开始执行 ImmunoGen 流程（target={target}）...")
+    if step2 in selected:
+        _preflight_immunogenicity_backend(run_id, backend_deepimmuno, "deepimmuno")
+        _preflight_immunogenicity_backend(run_id, backend_prime, "prime")
+        _preflight_immunogenicity_backend(run_id, backend_repitope, "repitope")
     if step3 in selected:
         _preflight_mhc1_backend(run_id, backend_mhc1_netmhcpan, backend_mhc1_bigmhc)
         _preflight_mhc2_backend(run_id, mhc2_backend)
@@ -315,6 +344,16 @@ if __name__ == "__main__":
         help="Repitope 适配器后端",
     )
     parser.add_argument(
+        "--require_real_immunogenicity_prime",
+        action="store_true",
+        help="要求 PRIME 必须使用真实来源（real_tsv/real_cmd），若回退 proxy 则报错。",
+    )
+    parser.add_argument(
+        "--require_real_immunogenicity_repitope",
+        action="store_true",
+        help="要求 Repitope 必须使用真实来源（real_tsv/real_cmd），若回退 proxy 则报错。",
+    )
+    parser.add_argument(
         "--target",
         default="full",
         choices=["full", "mhc_ranking", "report", "simhub", "feasibility"],
@@ -351,5 +390,7 @@ if __name__ == "__main__":
         backend_deepimmuno=args.backend_deepimmuno,
         backend_prime=args.backend_prime,
         backend_repitope=args.backend_repitope,
+        require_real_immunogenicity_prime=args.require_real_immunogenicity_prime,
+        require_real_immunogenicity_repitope=args.require_real_immunogenicity_repitope,
         target=args.target,
     )

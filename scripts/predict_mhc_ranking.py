@@ -148,6 +148,9 @@ def load_precomputed_immunogenicity(run_id: str) -> Dict[str, Dict[str, float]]:
             v = pd.to_numeric(r.get(col), errors="coerce")
             if pd.notna(v):
                 merged[pep][col] = float(v)
+                src = str(r.get("source", "")).strip()
+                if src:
+                    merged[pep][f"{col}__source"] = src
     return merged
 
 
@@ -440,6 +443,8 @@ def main(
     backend_mhc1_bigmhc: str = "auto",
     require_real_mhc2: bool = False,
     require_real_mhc1_cv: bool = False,
+    require_real_immunogenicity_prime: bool = False,
+    require_real_immunogenicity_repitope: bool = False,
 ):
     """
     主流程：
@@ -481,11 +486,12 @@ def main(
     if len(alleles) == 0:
         raise ValueError("没有可用的 HLA 等位基因，请检查 hla_typing.json 格式。")
 
-    # 供 NetMHCIIpan：去重后的、长度 9–14 且会进入 I 类预测的肽（与下循环条件一致，略去 8 mer）
+    # 供 MHC-II 层：去重后的、长度 8–14 且会进入 I 类预测的肽。
+    # 说明：默认 II 类多为 >=9 mer，但在 real_tsv 方案下允许 8 mer 回填，避免个别肽长期落入 proxy。
     cands_mhc2 = []
     for _, r in df.iterrows():
         p0 = str(r.get("mut_peptide", "")).strip()
-        if 8 <= len(p0) <= 14 and len(p0) >= 9:
+        if 8 <= len(p0) <= 14:
             cands_mhc2.append(p0)
     cands_mhc2 = list(dict.fromkeys(cands_mhc2))
     mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(run_id, hla_json, cands_mhc2, mhc2_backend)
@@ -574,9 +580,9 @@ def main(
             immunogenicity_deepimmuno = pre.get("immunogenicity_deepimmuno", deepimmuno_proxy(pep))
             immunogenicity_prime = pre.get("immunogenicity_prime", prime_proxy(pep))
             immunogenicity_repitope = pre.get("immunogenicity_repitope", repitope_proxy(pep))
-            src_deepimmuno = "precomputed" if "immunogenicity_deepimmuno" in pre else "proxy"
-            src_prime = "precomputed" if "immunogenicity_prime" in pre else "proxy"
-            src_repitope = "precomputed" if "immunogenicity_repitope" in pre else "proxy"
+            src_deepimmuno = pre.get("immunogenicity_deepimmuno__source", "precomputed") if "immunogenicity_deepimmuno" in pre else "proxy"
+            src_prime = pre.get("immunogenicity_prime__source", "precomputed") if "immunogenicity_prime" in pre else "proxy"
+            src_repitope = pre.get("immunogenicity_repitope__source", "precomputed") if "immunogenicity_repitope" in pre else "proxy"
             rows.append({
                 "mutation": row.get("mutation", ""),
                 "mut_peptide": pep,
@@ -641,6 +647,12 @@ def main(
         + w3 * out["vaf_norm"]
         + w4 * out["dissimilarity_norm"]
     )
+    if require_real_immunogenicity_prime:
+        if (out["immunogenicity_source_prime"].astype(str).str.lower() == "proxy").any():
+            raise RuntimeError("已启用 --require_real_immunogenicity_prime，但 PRIME 仍存在 proxy 来源。请提供 real_tsv 或 real_cmd 结果。")
+    if require_real_immunogenicity_repitope:
+        if (out["immunogenicity_source_repitope"].astype(str).str.lower() == "proxy").any():
+            raise RuntimeError("已启用 --require_real_immunogenicity_repitope，但 Repitope 仍存在 proxy 来源。请提供 real_tsv 或 real_cmd 结果。")
     out = out.sort_values("rank_score", ascending=False)
 
     out_file = os.path.join(out_dir, "peptide_mhc_ranking.csv")
@@ -693,6 +705,16 @@ if __name__ == "__main__":
         action="store_true",
         help="要求 NetMHCpan/BigMHC 至少一个使用真实结果（real_tsv/real_cmd）；否则报错。",
     )
+    parser.add_argument(
+        "--require_real_immunogenicity_prime",
+        action="store_true",
+        help="要求 PRIME 免疫原性必须为真实来源（real_tsv/real_cmd），若仍为 proxy 则报错。",
+    )
+    parser.add_argument(
+        "--require_real_immunogenicity_repitope",
+        action="store_true",
+        help="要求 Repitope 免疫原性必须为真实来源（real_tsv/real_cmd），若仍为 proxy 则报错。",
+    )
     args = parser.parse_args()
     main(
         args.run_id,
@@ -708,4 +730,6 @@ if __name__ == "__main__":
         backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
         require_real_mhc2=args.require_real_mhc2,
         require_real_mhc1_cv=args.require_real_mhc1_cv,
+        require_real_immunogenicity_prime=args.require_real_immunogenicity_prime,
+        require_real_immunogenicity_repitope=args.require_real_immunogenicity_repitope,
     )
