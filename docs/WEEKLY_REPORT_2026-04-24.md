@@ -14,6 +14,28 @@
 - PRIME 已接入真实来源（`real_tsv`），`R001` 在严格参数下可通过。
 - 已增加免疫原性真实来源强制开关，防止运行时静默回退到 proxy。
 
+## 2.1 任务书对照状态（逐条）
+
+### 已完成
+
+- **输入契约（任务书第 1 章）**：`neoantigen_candidates.csv`、`hla_typing.json`、`meta.json` 已接通并稳定校验。
+- **表位筛选主链（任务书第 2.1 章）**：MHC-I（NetMHCpan `real_cmd`）与 MHC-II（`real_tsv`）已落地，主流程可重复运行。
+- **候选排序（任务书第 2.2 章）**：综合排序公式已执行，`peptide_mhc_ranking.csv` 稳定产出。
+- **多价设计与 mRNA 设计（任务书第 2.3/2.4 章）**：已产出 `selected_peptides.csv`、`mrna_vaccine.fasta`、`mrna_design.json`。
+- **结果与自证交付（任务书第 3.1/3.3 章）**：`REPORT.md`、`SELF_CHECK.md`、`POSITIVE_CONTROL.md` 已有可用产物。
+
+### 部分完成
+
+- **免疫原性全真实化（任务书第 2.1 章）**：DeepImmuno 与 PRIME 已接入真实来源；Repitope 当前为 `real_tsv` 链路可用，但 `real_cmd` 实时推理未闭环。
+- **Simulation Hub 交付链（任务书第 3.2 章）**：`to_simhub/<case_id>/` 文件结构已生成并可交付，SimHub 回传证据归档流程需继续标准化。
+- **结构后端升级进度**：`R_public_001` 已切换为 `afm` 口径，`replaces_coarse=True`，已替换 coarse 占位标记。
+
+### 未完成
+
+- **Repitope 本机实时模型推理（任务书第 2.1 章）**：尚未完成 `real_cmd` 级闭环。
+- **mRNA 稳定性高级工具（任务书第 2.5 章可选）**：Saluki/RNAsnp 未纳入主流程。
+- **LNP 递送方案深化（任务书第 2.6 章可选）**：当前仅保留说明，未做工程化设计。
+
 ## 3. 当前状态分层
 
 ### 3.1 已闭环

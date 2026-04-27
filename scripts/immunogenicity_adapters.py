@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-免疫原性适配器公共逻辑（可选真模型 + 自动回退 proxy）。
+免疫原性适配器公共逻辑（优先真实来源，默认禁止自动回退 proxy）。
 
 说明：
 - 本模块支持三种来源：
@@ -9,6 +9,8 @@
   3) real_cmd：调用外部命令生成 TSV（通过环境变量配置）。
 - 各适配器输出统一文件：results/<run_id>/tool_outputs/*.tsv
   列至少包含：mut_peptide + immunogenicity_* + source + version。
+- 默认策略：auto 仅尝试 real_tsv -> real_cmd，不再静默回退 proxy。
+  如需保留历史行为，可设置环境变量 IMMUNO_ALLOW_PROXY_FALLBACK=1。
 """
 import os
 import shlex
@@ -17,6 +19,15 @@ import tempfile
 from typing import Dict, Tuple
 
 import pandas as pd
+
+
+def _allow_proxy_fallback() -> bool:
+    """
+    是否允许 auto 模式回退 proxy。
+    默认关闭，防止在“应接入真实模型”阶段静默产出代理分。
+    """
+    v = (os.environ.get("IMMUNO_ALLOW_PROXY_FALLBACK") or "").strip().lower()
+    return v in {"1", "true", "yes", "y", "on"}
 
 
 def deepimmuno_proxy(peptide: str) -> float:
@@ -210,7 +221,7 @@ def build_tool_df_with_backend(
     """
     生成工具输出并返回 (df, backend_used)。
     backend:
-    - auto：优先 real_tsv -> real_cmd -> proxy
+    - auto：优先 real_tsv -> real_cmd（默认不回退 proxy；可由 IMMUNO_ALLOW_PROXY_FALLBACK=1 打开）
     - real_tsv：仅读 raw/<tool>.tsv，失败抛错
     - real_cmd：仅调用命令，失败抛错
     - proxy：仅代理
@@ -226,7 +237,7 @@ def build_tool_df_with_backend(
     if b == "real_cmd":
         return _run_real_cmd(peptides, run_id, tool_name), "real_cmd"
 
-    # auto
+    # auto：默认禁止静默回退 proxy，避免“看似可用但实为代理分”的情况
     try:
         return _try_real_tsv(run_id, tool_name), "real_tsv"
     except Exception:
@@ -235,4 +246,9 @@ def build_tool_df_with_backend(
         return _run_real_cmd(peptides, run_id, tool_name), "real_cmd"
     except Exception:
         pass
-    return build_tool_df(peptides, tool_name), "proxy"
+    if _allow_proxy_fallback():
+        return build_tool_df(peptides, tool_name), "proxy"
+    raise RuntimeError(
+        f"{tool_name} 在 auto 模式下未获取到真实结果（real_tsv/real_cmd 均失败），"
+        "且未启用代理回退。可设置 IMMUNO_ALLOW_PROXY_FALLBACK=1 允许回退 proxy。"
+    )

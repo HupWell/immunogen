@@ -1,0 +1,62 @@
+输入校验通过。
+run_id: R002
+候选肽条目数: 3
+CSV列: ['mutation', 'mut_peptide', 'wt_peptide', 'transcript_id', 'variant_vaf']
+可选列建议: ['mutation', 'transcript_id']
+HLA计数: A=2, B=2, C=2, II 类合计(若有)=6（键名见 docs/hla_typing.md）
+完成: results/R002/tool_outputs/deepimmuno.tsv（deepimmuno backend=auto -> used=real_tsv）
+完成: results/R002/tool_outputs/prime.tsv（prime backend=auto -> used=real_tsv）
+完成: results/R002/tool_outputs/repitope.tsv（repitope backend=auto -> used=real_tsv）
+2026-04-27 15:39:10.398041: I tensorflow/core/util/port.cc:110] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-27 15:39:10.452018: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-04-27 15:39:11.458302: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+2026-04-27 15:39:13.335567: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1639] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 9457 MB memory:  -> device: 0, name: NVIDIA GeForce RTX 2080 Ti, pci bus id: 0000:40:00.0, compute capability: 7.5
+MHC-II 层: 模式=netmhciipan，查表条目数=3
+免疫原性预计算表: 命中肽数=3（缺失时自动回退 proxy）
+MHC-I 交叉验证 NetMHCpan: source=real_cmd, rows=18
+MHC-I 交叉验证 BigMHC: source=off, rows=0
+1/1 [==============================] - ETA: 0s1/1 [==============================] - 1s 1s/step
+1/1 [==============================] - ETA: 0s1/1 [==============================] - 0s 30ms/step
+1/1 [==============================] - ETA: 0s1/1 [==============================] - 0s 25ms/step
+完成: results/R002/peptide_mhc_ranking.csv
+后端摘要: mhc2_mode=netmhciipan, mhc1_netmhcpan_source=real_cmd, mhc1_bigmhc_source=off
+完成: results/R002/selected_peptides.csv
+原始突变肽数: 3
+过滤后突变肽数: 3
+最终入选数: 3
+完成: results/R002/mrna_vaccine.fasta
+完成: results/R002/mrna_design.json
+肽段数: 3
+总长度: 229
+完成: results/R002/qc_metrics.json
+完成: results/R002/REPORT.md
+完成: results/R002/POSITIVE_CONTROL.md
+完成: results/R002/SELF_CHECK.md
+完成: deliveries/R002/to_simhub/public_case_002/complex.pdb
+完成: deliveries/R002/to_simhub/public_case_002/hla_allele.txt
+完成: deliveries/R002/to_simhub/public_case_002/meta.json
+完成: deliveries/R002/to_simhub/public_case_002/selected_for_md.csv
+完成: results/R002/feasibility_report.json
+完成: results/R002/FEASIBILITY.md
+开始执行 ImmunoGen 流程（target=full）...
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/validate_input.py --run_id R002
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/run_immunogenicity_adapters.py --run_id R002 --backend_deepimmuno auto --backend_prime auto --backend_repitope auto
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/predict_mhc_ranking.py --run_id R002 --mhc2_backend real_tsv --wi_deepimmuno 1.0 --wi_prime 1.0 --wi_repitope 1.0 --backend_mhc1_netmhcpan real_cmd --backend_mhc1_bigmhc off --require_real_mhc2 --require_real_mhc1_cv --require_real_immunogenicity_prime --require_real_immunogenicity_repitope
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/select_top_peptides.py --run_id R002 --top_n 10 --min_dissimilarity 0.1
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/build_multivalent_mrna.py --run_id R002 --linker AAY --poly_a_len 120 --codon_mode optimized --signal_peptide_preset  --signal_peptide_aa  --tm_domain_preset  --tm_domain_aa 
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/run_qc_and_report.py --run_id R002
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/prepare_self_certification.py --run_id R002
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/prepare_simhub_delivery.py --run_id R002 --top_k 3 --structure_backend coarse --structure_input_pdb 
+
+[执行] /root/miniconda3/bin/python /root/autodl-tmp/scripts/validate_feasibility.py --run_id R002 --top_n 10
+
+所选步骤执行完成。

@@ -16,11 +16,12 @@
 import os
 import json
 import argparse
+from typing import Dict, Tuple
 import pandas as pd
 import numpy as np
 
 
-def normalize_chain_ids_for_contract(pdb_text: str) -> tuple[str, dict]:
+def normalize_chain_ids_for_contract(pdb_text: str) -> Tuple[str, Dict[str, str]]:
     """
     将输入 PDB 的前三个链统一重映射为 M/B/P。
     仅处理 ATOM/HETATM 行；其余行原样保留。

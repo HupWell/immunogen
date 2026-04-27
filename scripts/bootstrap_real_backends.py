@@ -7,6 +7,17 @@
 1) 检查 real_tsv 文件是否存在、列是否符合要求；
 2) 可选自动执行 mhc_ranking；
 3) 可选自动执行真实性验收。
+
+约定路径（与 predict_mhc_ranking / run_all 一致）：
+- MHC-I：results/<run_id>/tool_outputs/raw/mhc1_netmhcpan.tsv
+  必需列：mut_peptide +（mhc1_cv_netmhcpan_nM|affinity_nM|affinity|ic50|score 之一）
+- MHC-II：results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv
+  必需列：mut_peptide +（mhc2_el_rank|el_rank|pct_rank_el|rank 之一）
+
+多实例说明：
+- 仓库内已放齐真实 TSV 的示例包括 R001、R002、R003、R_public_001 等；新建 run 需自行生成或从
+  病例工具导出上述文件。若 hla_typing.json 中暂无 II 类键名，仍可用参考等位基因（如 DRB1*15:01）
+  的 mhc2 real_tsv 做演示级回填，正式交付须换成患者真实 II 类结果。
 """
 
 import argparse
@@ -48,8 +59,17 @@ def _check_columns(df: pd.DataFrame, required: List[str], any_of: List[List[str]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run_id", required=True, help="例如 R001")
+    parser = argparse.ArgumentParser(
+        description="检查 MHC real_tsv 就绪情况，可选一键跑 mhc_ranking 与验收。",
+        epilog=(
+            "示例：\n"
+            "  python scripts/bootstrap_real_backends.py --run_id R002 --with_mhc2\n"
+            "  python scripts/bootstrap_real_backends.py --run_id R002 --with_mhc2 --run --validate\n"
+            "说明：--with_mhc2 时才会检查 mhc2_netmhciipan.tsv；与 run_all 的 --mhc2_backend real_tsv 配套。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--run_id", required=True, help="例如 R001、R002、R_public_001")
     parser.add_argument("--with_mhc2", action="store_true", help="要求同时检查 MHC-II real_tsv")
     parser.add_argument("--run", action="store_true", help="检查通过后自动执行 mhc_ranking")
     parser.add_argument("--validate", action="store_true", help="执行后自动运行 check_epitope_realization")

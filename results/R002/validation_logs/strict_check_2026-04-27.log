@@ -1,0 +1,8 @@
+[check] run_id=R002
+[check] mhc2_real=True
+[check] mhc1_cv_real=True
+[check] mhc1_cv_source_netmhcpan=['real_cmd']
+[check] mhc1_cv_source_bigmhc=['off']
+[check] mhc1_cv_source=['real_cmd']
+[check] mhc1_cv_tool=['netmhcpan']
+验收通过。
