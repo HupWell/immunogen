@@ -68,8 +68,8 @@ def write_self_check(
     """双工具评分、阈值与已知局限的自证说明。"""
     mfe = qc.get("rnafold_mfe")
     rf_status = qc.get("rnafold_status", "unknown")
-    mhc2_note = "（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列：proxy=代理分，netmhciipan=实跑）"
-    immuno_note = "免疫原性来源：未读取到来源列，默认按 proxy 解释。"
+    mhc2_note = "（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列应为 netmhciipan；proxy 不再作为默认验收口径）"
+    immuno_note = "免疫原性来源：未读取到来源列，默认按未通过真实来源验收解释。"
     if ranking is not None:
         cols = [
             "immunogenicity_source_deepimmuno",
@@ -121,16 +121,16 @@ def write_self_check(
 
 ## 4. 已知局限（须在汇报中声明）
 
-1. **MHC-II**：可通过 `--mhc2_backend` 与 `NETMHCIIPAN_BIN` 等环境变量接 **NetMHCIIpan**；未配置或无可转换的 II 类分型时行内为 **proxy**。
-2. **免疫原性（DeepImmuno / PRIME / Repitope）**：当前为可复现代理分；真实模型需单独部署与校准。
-3. **NetMHCpan / BigMHC**：未作为默认第二路 MHC-I；可在 `SELF_CHECK` 后续版本中补充交叉验证表。
-4. **SimHub 初始结构**：当前 `complex.pdb` 为**粗粒度**多链占位，**必须**替换为 AlphaFold-Multimer / PANDORA 等生成的真实复合物。
+1. **MHC-II**：当前验收要求 **NetMHCIIpan/real_tsv** 真实来源；缺失时流程应报错，不应静默回退 proxy。
+2. **免疫原性（DeepImmuno / PRIME / Repitope）**：当前验收要求 real_tsv/real_cmd 真实来源；缺失时流程应报错。
+3. **NetMHCpan / BigMHC**：NetMHCpan 作为默认 MHC-I 真实交叉验证；BigMHC 为可选增强，不作为代理补位。
+4. **SimHub 初始结构**：当前交付要求 PANDORA / AFM 等真实结构文件；`coarse` 仅可作为显式调试选项，不能冒充真实交付。
 5. **肽–MHC 分支禁止使用 SDF + 小分子电荷模型**；本仓库 SimHub 交付已按契约仅输出 `complex.pdb` + `meta.json` + 可选 `hla_allele.txt`。
 
 ## 4.1 结构后端策略（当前建议）
 
-- 默认交付链路保持 `coarse`，用于保证无外部依赖时也可跑通全流程。
-- 真实结构建议采用“**PANDORA 批量 + AFM 重点复核**”组合策略（见 `docs/structure_backend_selection.md`）。
+- 默认交付链路要求 `pandora`/`afm` 真实 PDB，并通过 `meta.json` 标记 `replaces_coarse=true`。
+- 真实结构采用“**PANDORA 批量 + AFM 重点复核**”组合策略（见 `docs/structure_backend_selection.md`）。
 - 若使用 AFM，建议独立任务执行并回填 PDB，避免阻塞主流水线。
 
 ## 5. 与任务书对齐

@@ -1,11 +1,5 @@
 # Self Check（R002）
 
-## 0. 数据来源声明（P1 替代方案 A）
-
-- 本 run 的 HLA-II 分型用于流程演示，来源于公开文献口径（Dhall et al., 2020, TCGA-SKCM 研究中的公开 HLA-II 类型范围），**非患者临床终版分型**。
-- 当前 `deliveries/R002/to_immunogen/hla_typing.json` 已补充 II 类键：`HLA-DRB1`、`HLA-DQB1`、`HLA-DPB1`。
-- 终版交付仍需 BioDriver 上游提供患者真实 II 类分型后再次重跑并验收。
-
 ## 1. 双工具 / 双证据链（当前实现）
 
 | 环节 | 工具或实现 | 用途 |
@@ -14,7 +8,7 @@
 | MHC-II | **NetMHCIIpan**（子进程，见 `netmhciipan_runner.py`；列 `mhc2_el_rank` / `mhc2_ba_nm`） | 真实 II 类预测时 EL %Rank 等；仍须声明工具版本与等位基因写法 |
 | mRNA 二级结构 / MFE | **ViennaRNA**（优先 `RNAfold` 命令，否则 Python `RNA` 绑定） | MFE 与 dot-bracket，用于质控图与 `mrna_design.json` |
 
-- 本轮 MHC-II 行统计 netmhciipan: 18。（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列：proxy=代理分，netmhciipan=实跑）
+- 本轮 MHC-II 行统计 netmhciipan: 18。（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列应为 netmhciipan；proxy 不再作为默认验收口径）
 - 免疫原性来源统计：immunogenicity_source_deepimmuno=deepimmuno_real_cmd:18；immunogenicity_source_prime=prime_real_cmd:18；immunogenicity_source_repitope=repitope_public_dataset_knn:12，repitope_public_dataset_exact:6
 
 ## 2. 关键阈值与过滤（当前默认）
@@ -32,16 +26,16 @@
 
 ## 4. 已知局限（须在汇报中声明）
 
-1. **MHC-II**：可通过 `--mhc2_backend` 与 `NETMHCIIPAN_BIN` 等环境变量接 **NetMHCIIpan**；未配置或无可转换的 II 类分型时行内为 **proxy**。
-2. **免疫原性（DeepImmuno / PRIME / Repitope）**：当前为可复现代理分；真实模型需单独部署与校准。
-3. **NetMHCpan / BigMHC**：未作为默认第二路 MHC-I；可在 `SELF_CHECK` 后续版本中补充交叉验证表。
-4. **SimHub 初始结构**：当前 `complex.pdb` 为**粗粒度**多链占位，**必须**替换为 AlphaFold-Multimer / PANDORA 等生成的真实复合物。
+1. **MHC-II**：当前验收要求 **NetMHCIIpan/real_tsv** 真实来源；缺失时流程应报错，不应静默回退 proxy。
+2. **免疫原性（DeepImmuno / PRIME / Repitope）**：当前验收要求 real_tsv/real_cmd 真实来源；缺失时流程应报错。
+3. **NetMHCpan / BigMHC**：NetMHCpan 作为默认 MHC-I 真实交叉验证；BigMHC 为可选增强，不作为代理补位。
+4. **SimHub 初始结构**：当前交付要求 PANDORA / AFM 等真实结构文件；`coarse` 仅可作为显式调试选项，不能冒充真实交付。
 5. **肽–MHC 分支禁止使用 SDF + 小分子电荷模型**；本仓库 SimHub 交付已按契约仅输出 `complex.pdb` + `meta.json` + 可选 `hla_allele.txt`。
 
 ## 4.1 结构后端策略（当前建议）
 
-- 默认交付链路保持 `coarse`，用于保证无外部依赖时也可跑通全流程。
-- 真实结构建议采用“**PANDORA 批量 + AFM 重点复核**”组合策略（见 `docs/structure_backend_selection.md`）。
+- 默认交付链路要求 `pandora`/`afm` 真实 PDB，并通过 `meta.json` 标记 `replaces_coarse=true`。
+- 真实结构采用“**PANDORA 批量 + AFM 重点复核**”组合策略（见 `docs/structure_backend_selection.md`）。
 - 若使用 AFM，建议独立任务执行并回填 PDB，避免阻塞主流水线。
 
 ## 5. 与任务书对齐

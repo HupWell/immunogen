@@ -41,11 +41,11 @@
 ## 二、还没完成（Not Done）
 
 ### 1) 数据真实性与临床终版缺口
-- [ ] `R_public_001`、`R002`、`R003` 的 MHC-II 仍含参考等位基因（如 `DRB1*15:01`）回填场景，尚未全部替换为患者真实 II 类分型
-- [ ] 尚未形成“患者真实 II 类分型 -> 自动重跑 -> 自动更新验收”的标准化闭环
+- [ ] `R_public_001`、`R002`、`R003` 的 MHC-II 当前已完成公开文献口径演示替代，但尚未替换为 BioDriver 上游患者真实 II 类分型
+- [ ] 尚未形成“BioDriver 真实 II 类分型 -> 自动重跑 -> 自动更新验收”的临床终版闭环
 
 ### 2) 结构交付本体缺口
-- [ ] 虽然部分 `meta.json` 已标记 `structure_backend=afm` / `replaces_coarse=true`，但各 run 的 `complex.pdb` 尚未逐例完成“高精度结构本体替换 + 质量复核”
+- [x] `R001/R002/R003/R_public_001` 已使用 PANDORA 真实生成 `complex.pdb`，并完成 M/B/P 三链质量复核
 
 ### 3) 任务书增强项未工程化
 - [ ] 生产级密码子优化真实接入（LinearDesign / COOL）
@@ -56,9 +56,9 @@
 
 ## 三、下一步执行清单（按优先级）
 
-### P1（当前应先做）【状态：上游数据阻塞，启用替代方案】
+### P1（已完成演示替代，临床终版等待上游）
 
-> **2026-04-27 更新**：BioDriver 上游数据暂时无法获取，P1 暂停等待。建议启用下方"替代方案 A"或优先推进 P2。
+> **2026-04-27 更新**：BioDriver 上游数据暂时无法获取；P1 替代方案 A 已完成，可用于流程展示。临床终版等待 BioDriver 后续提供真实 II 类分型。
 
 #### P1-1: 向 BioDriver 请求 HLA-II 分型数据【阻塞】
 - [x] 已创建数据请求文档：`docs/biodriver_hla_ii_request.md`
@@ -112,9 +112,38 @@
 - P1 替代方案 A 已完成（可用于流程展示与验收归档）
 - 临床终版仍需 BioDriver 真实 II 类分型，届时需再执行一次全量重跑
 
-### P2（紧随其后）
-- [ ] 对 `R001/R002/R003/R_public_001` 逐例完成 `complex.pdb` 高精度本体替换与结构质量复核
-- [ ] 把“结构来源标记”与“结构本体文件”做一致性检查，避免仅改 metadata
+### P2（当前优先推进）：结构本体替换与质量复核
+
+#### P2-1: 结构输入准备
+- [x] 为 `R001/R002/R003/R_public_001` 逐例确认 Top peptide-MHC 组合（来自 `selected_for_md.csv`）
+- [x] 生成/复核结构建模输入序列（MHC-I alpha、B2M、peptide）
+- [x] 明确每个 case 的建模后端：优先 PANDORA 批量，AFM 重点复核
+  - 归档文档：`docs/P2_STRUCTURE_INPUTS_2026-04-27.md`
+  - 修正记录：`prepare_mhc_chain_sequences.py` 已改为优先使用 Top HLA-I 等位基因生成 alpha 链输入
+
+#### P2-2: 高精度结构本体替换
+- [x] 安装结构建模环境（只安装真实工具，不生成伪造结构）
+  - 归档文档：`docs/P2_STRUCTURE_ENV_SETUP_2026-04-28.md`
+  - 已可用：`pandora_src` 环境、`MUSCLE 5.2`、系统 `blastp/makeblastdb 2.9.0+`
+  - 已可用：`colabfold` 环境与 `colabfold_batch` 命令入口
+  - 已配置：MODELLER 真实 license key（不记录明文）
+  - 已修复：`csb-pandora 0.9` 的 Biopython 兼容问题与 IMGT HTTPS 下载问题
+  - 已完成：下载 Zenodo 官方 PANDORA 数据库 `default.tar.gz`，并接入 864 个 MHC-I / 136 个 MHC-II 模板
+  - 待增强：ColabFold GPU 版 JAX（当前 `jax 0.6.2` 仅识别 CPU）
+- [x] 用 PANDORA 生成 `R001/R002/R003/R_public_001` 真实 peptide-MHC 复合物
+- [x] 替换 `deliveries/<run_id>/to_simhub/<case_id>/complex.pdb`
+- [x] 更新 `meta.json`：`structure_backend=pandora`、`structure_tool_version`、`replaces_coarse=true`
+
+#### P2-3: 结构质量复核
+- [x] 检查 `complex.pdb` 是否包含 Chain M / B / P
+- [x] 检查 peptide 是否与 `selected_for_md.csv` 对齐
+- [x] 检查是否仍有 `coarse_initial_complex` / `na_for_coarse` / `replaces_coarse=false`
+- [x] 归档结构复核记录：`docs/P2_PANDORA_STRUCTURE_VALIDATION_2026-04-28.md`
+
+#### P2-4: SimHub 交付刷新
+- [x] 重新运行 `prepare_simhub_delivery.py`（非 coarse 后端）
+- [x] 重新检查 `deliveries/<run_id>/to_simhub/<case_id>/` 文件完整性
+- [x] 更新 `SELF_CHECK.md` 中结构后端说明
 
 ### P3（第二阶段增强）
 - [ ] 接入 LinearDesign/COOL 并纳入主流程参数

@@ -2,11 +2,11 @@
   "run_id": "R003",
   "case_id": "public_case_003",
   "molecule_type": "peptide_mhc",
-  "delivery_stage": "coarse_initial_complex",
-  "structure_backend": "coarse",
-  "structure_source": "generated_in_script",
-  "structure_tool_version": "na_for_coarse",
-  "replaces_coarse": false,
+  "delivery_stage": "model_initial_complex",
+  "structure_backend": "pandora",
+  "structure_source": "results/structure_models/pandora/R003/public_case_003/complex.pdb",
+  "structure_tool_version": "provided_by_user",
+  "replaces_coarse": true,
   "chain_id_contract": {
     "target": [
       "M",
@@ -23,7 +23,7 @@
   "top_k_for_md": 3,
   "selected_for_md_file": "selected_for_md.csv",
   "notes": [
-    "complex.pdb 为粗粒度 M/B/P 三链 CA 初始构象，仅用于流程联通与接口验收。",
+    "complex.pdb 来自外部结构工具输入（用户提供）。",
     "禁止使用 SDF + AM1-BCC 处理多肽；多肽须保留氨基酸残基拓扑，走 AMBER14SB 蛋白力场。",
     "生产环境请用 AlphaFold-Multimer 或 PANDORA 生成高精度 complex.pdb 后再送 MD。"
   ]

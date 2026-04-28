@@ -112,8 +112,10 @@ def main(
     backend_deepimmuno: str,
     backend_prime: str,
     backend_repitope: str,
+    require_real_immunogenicity_deepimmuno: bool,
     require_real_immunogenicity_prime: bool,
     require_real_immunogenicity_repitope: bool,
+    allow_proxy_scores: bool,
     target: str,
 ):
     """按固定顺序执行全流程。"""
@@ -160,10 +162,14 @@ def main(
         step3.append("--require_real_mhc2")
     if require_real_mhc1_cv:
         step3.append("--require_real_mhc1_cv")
+    if require_real_immunogenicity_deepimmuno:
+        step3.append("--require_real_immunogenicity_deepimmuno")
     if require_real_immunogenicity_prime:
         step3.append("--require_real_immunogenicity_prime")
     if require_real_immunogenicity_repitope:
         step3.append("--require_real_immunogenicity_repitope")
+    if allow_proxy_scores:
+        step3.append("--allow_proxy_scores")
     step4 = [
         python_exe,
         os.path.join(scripts_dir, "select_top_peptides.py"),
@@ -296,62 +302,75 @@ if __name__ == "__main__":
     parser.add_argument("--structure_seq_strict", action="store_true", help="拉取/匹配失败时中断流程")
     parser.add_argument(
         "--structure_backend",
-        default="coarse",
+        default="pandora",
         choices=["coarse", "pandora", "afm"],
-        help="SimHub 结构来源：coarse(默认)/pandora/afm",
+        help="SimHub 结构来源：pandora(默认)/afm/coarse；真实交付需提供 --structure_input_pdb",
     )
     parser.add_argument("--structure_input_pdb", default="", help="若 structure_backend 非 coarse，提供外部 PDB 路径")
     parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
     parser.add_argument(
         "--mhc2_backend",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "proxy", "real_tsv", "netmhciipan"],
-        help="MHC-II：auto=优先 netmhciipan，其次 real_tsv，最后 proxy；real_tsv 读取 results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv。",
+        help="MHC-II：默认 real_tsv，读取 results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv；auto 也不会静默回退 proxy。",
     )
     parser.add_argument("--wi_deepimmuno", type=float, default=1.0, help="immunogenicity_deepimmuno 子权重")
     parser.add_argument("--wi_prime", type=float, default=1.0, help="immunogenicity_prime 子权重")
     parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
     parser.add_argument(
         "--backend_mhc1_netmhcpan",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "real_tsv", "real_cmd", "off"],
         help="MHC-I 交叉验证 NetMHCpan 后端",
     )
     parser.add_argument(
         "--backend_mhc1_bigmhc",
-        default="auto",
+        default="off",
         choices=["auto", "real_tsv", "real_cmd", "off"],
-        help="MHC-I 交叉验证 BigMHC 后端",
+        help="MHC-I 交叉验证 BigMHC 后端（默认 off；NetMHCpan real_tsv 作为必需真实交叉验证）",
     )
-    parser.add_argument("--require_real_mhc2", action="store_true", help="要求 MHC-II 必须 real（netmhciipan）")
-    parser.add_argument("--require_real_mhc1_cv", action="store_true", help="要求 MHC-I 交叉验证至少一个 real")
+    parser.add_argument("--require_real_mhc2", action="store_true", default=True, help="要求 MHC-II 必须 real（默认开启）")
+    parser.add_argument("--require_real_mhc1_cv", action="store_true", default=True, help="要求 MHC-I 交叉验证至少一个 real（默认开启）")
     parser.add_argument(
         "--backend_deepimmuno",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "real_tsv", "real_cmd", "proxy"],
         help="DeepImmuno 适配器后端",
     )
     parser.add_argument(
         "--backend_prime",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "real_tsv", "real_cmd", "proxy"],
         help="PRIME 适配器后端",
     )
     parser.add_argument(
         "--backend_repitope",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "real_tsv", "real_cmd", "proxy"],
         help="Repitope 适配器后端",
     )
     parser.add_argument(
+        "--require_real_immunogenicity_deepimmuno",
+        action="store_true",
+        default=True,
+        help="要求 DeepImmuno 必须使用真实来源（默认开启）。",
+    )
+    parser.add_argument(
         "--require_real_immunogenicity_prime",
         action="store_true",
+        default=True,
         help="要求 PRIME 必须使用真实来源（real_tsv/real_cmd），若回退 proxy 则报错。",
     )
     parser.add_argument(
         "--require_real_immunogenicity_repitope",
         action="store_true",
+        default=True,
         help="要求 Repitope 必须使用真实来源（real_tsv/real_cmd），若回退 proxy 则报错。",
+    )
+    parser.add_argument(
+        "--allow_proxy_scores",
+        action="store_true",
+        help="显式允许 MHC-II 或免疫原性缺失时使用代理分；默认禁止。",
     )
     parser.add_argument(
         "--target",
@@ -390,7 +409,9 @@ if __name__ == "__main__":
         backend_deepimmuno=args.backend_deepimmuno,
         backend_prime=args.backend_prime,
         backend_repitope=args.backend_repitope,
+        require_real_immunogenicity_deepimmuno=args.require_real_immunogenicity_deepimmuno,
         require_real_immunogenicity_prime=args.require_real_immunogenicity_prime,
         require_real_immunogenicity_repitope=args.require_real_immunogenicity_repitope,
+        allow_proxy_scores=args.allow_proxy_scores,
         target=args.target,
     )

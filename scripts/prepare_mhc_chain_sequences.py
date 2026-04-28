@@ -110,10 +110,44 @@ def build_alpha_index(ipd_text_by_gene: dict):
     return index
 
 
-def pick_target_alpha_allele(hla_json: dict):
+def pick_target_alpha_allele(hla_json: dict, run_id: str = ""):
     """
-    当前策略：优先 HLA-A，其次 HLA-B，再 HLA-C；各键取第一个可用等位基因。
+    当前策略：
+    1) 优先使用已选 MD/候选排序中的 Top HLA-I 等位基因；
+    2) 若结果文件暂不可用，再回退到 hla_typing.json 中 HLA-A/B/C 的第一个可用值。
     """
+    candidate_files = []
+    if run_id:
+        meta_path = os.path.join("deliveries", run_id, "to_immunogen", "meta.json")
+        case_id = run_id
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    case_id = json.load(f).get("case_id") or run_id
+            except Exception:
+                case_id = run_id
+        candidate_files.extend(
+            [
+                os.path.join("deliveries", run_id, "to_simhub", case_id, "selected_for_md.csv"),
+                os.path.join("results", run_id, "selected_peptides.csv"),
+            ]
+        )
+    for path in candidate_files:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                header = f.readline().strip().split(",")
+                if "hla_allele" not in header:
+                    continue
+                idx = header.index("hla_allele")
+                row = f.readline().strip().split(",")
+                if idx < len(row):
+                    norm = normalize_hla_allele(row[idx])
+                    if norm and re.match(r"^HLA-[ABC]\*", norm):
+                        return norm
+        except Exception:
+            continue
     for key in ("HLA-A", "HLA-B", "HLA-C"):
         vals = hla_json.get(key) or []
         if isinstance(vals, list):
@@ -142,7 +176,7 @@ def main(run_id: str, refresh_remote: bool, strict: bool):
     if not os.path.exists(hla_path):
         raise FileNotFoundError(f"未找到输入文件: {hla_path}")
     hla_json = load_json(hla_path)
-    target_allele = pick_target_alpha_allele(hla_json)
+    target_allele = pick_target_alpha_allele(hla_json, run_id=run_id)
     if not target_allele:
         raise ValueError("未在 hla_typing.json 中找到可用的 HLA-A/B/C 等位基因。")
 

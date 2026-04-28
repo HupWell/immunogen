@@ -4,7 +4,7 @@
 主要功能：
 1) 读取 BioDriver 提供的候选突变肽和 HLA 分型；
 2) 使用 MHCflurry 预测每条突变肽与病人 HLA-I 的结合亲和力；
-3) 可选使用 NetMHCIIpan（`--mhc2_backend`）做 MHC-II 层评分，否则使用代理分；
+3) 使用 NetMHCIIpan / real_tsv 做 MHC-II 层评分，默认禁止回退代理分；
 4) 生成排名文件 peptide_mhc_ranking.csv。
 
 输入文件：
@@ -120,7 +120,7 @@ def mhc2_proxy_score(peptide: str, hla_allele: str) -> float:
 def load_precomputed_immunogenicity(run_id: str) -> Dict[str, Dict[str, float]]:
     """
     读取 results/<run_id>/tool_outputs/*.tsv 作为预计算表。
-    缺失文件不报错，返回可用部分；主流程会对缺失值回退 proxy。
+    缺失文件不报错，返回可用部分；主流程默认要求三路真实分数完整。
     """
     base = os.path.join("results", run_id, "tool_outputs")
     files = {
@@ -347,7 +347,7 @@ def _prepare_mhc2_lookup(
 ) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     按 backend 预计算 (peptide->NetMHCIIpan 行, 或 None)；返回 (lookup 或 None, 实际模式说明)。
-    auto：能调用真实工具且 hla 含可转换的 II 类时尝试，否则 None（下游用 proxy）。
+    auto：能调用真实工具且 hla 含可转换的 II 类时尝试，否则读取 real_tsv；都失败则报错。
     """
     def _load_mhc2_real_tsv(_run_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -421,12 +421,37 @@ def _prepare_mhc2_lookup(
         lu, st = build_peptide_mhc2_lookup(hla_json, candidate_peptides)
         if st == "ok" and lu:
             return lu, "netmhciipan"
-        print(f"NetMHCIIpan（auto）未使用，将回退 proxy。原因: {st}")
+        print(f"NetMHCIIpan（auto）未使用，将尝试 real_tsv。原因: {st}")
     # auto 下优先尝试真实 TSV 回填，避免长期 proxy
     lu = _load_mhc2_real_tsv(run_id)
     if lu:
         return lu, "netmhciipan"
-    return None, "proxy"
+    raise RuntimeError(
+        f"MHC-II auto 未获取到真实结果。请安装/配置 NetMHCIIpan，或提供 "
+        f"results/{run_id}/tool_outputs/raw/mhc2_netmhciipan.tsv。"
+    )
+
+
+def _immunogenicity_value(
+    pre: Dict[str, Any],
+    pep: str,
+    col: str,
+    allow_proxy_scores: bool,
+) -> Tuple[float, str]:
+    """读取真实免疫原性分数；只有显式允许时才使用代理分。"""
+    proxy_fns = {
+        "immunogenicity_deepimmuno": deepimmuno_proxy,
+        "immunogenicity_prime": prime_proxy,
+        "immunogenicity_repitope": repitope_proxy,
+    }
+    if col in pre:
+        src = str(pre.get(f"{col}__source", "precomputed")).strip() or "precomputed"
+        if "proxy" in src.lower() and not allow_proxy_scores:
+            raise RuntimeError(f"{pep} 的 {col} 来源为 proxy，当前流程要求真实来源。")
+        return float(pre[col]), src
+    if allow_proxy_scores:
+        return proxy_fns[col](pep), "proxy"
+    raise RuntimeError(f"{pep} 缺少 {col} 真实分数，请先生成对应 real_tsv 或 real_cmd 输出。")
 
 
 def main(
@@ -443,8 +468,10 @@ def main(
     backend_mhc1_bigmhc: str = "auto",
     require_real_mhc2: bool = False,
     require_real_mhc1_cv: bool = False,
+    require_real_immunogenicity_deepimmuno: bool = False,
     require_real_immunogenicity_prime: bool = False,
     require_real_immunogenicity_repitope: bool = False,
+    allow_proxy_scores: bool = False,
 ):
     """
     主流程：
@@ -497,7 +524,7 @@ def main(
     mhc2_lookup, mhc2_mode = _prepare_mhc2_lookup(run_id, hla_json, cands_mhc2, mhc2_backend)
     print(f"MHC-II 层: 模式={mhc2_mode}，查表条目数={len(mhc2_lookup) if mhc2_lookup else 0}")
     precomputed_immuno = load_precomputed_immunogenicity(run_id)
-    print(f"免疫原性预计算表: 命中肽数={len(precomputed_immuno)}（缺失时自动回退 proxy）")
+    print(f"免疫原性预计算表: 命中肽数={len(precomputed_immuno)}（默认不回退 proxy）")
     cv_input = _cmd_input_pairs(df, alleles)
     cv_netmhcpan_df, cv_netmhcpan_src = _load_mhc1_cv_with_backend(
         tool="mhc1_netmhcpan",
@@ -573,16 +600,21 @@ def main(
                 m2ba = lu.get("mhc2_ba_nm")
                 m2a2 = lu.get("mhc2_allele", "")
             else:
+                if not allow_proxy_scores and mhc2_mode != "proxy":
+                    raise RuntimeError(f"{pep} 缺少真实 MHC-II 结果，请补充 NetMHCIIpan real_tsv 或 real_cmd 输出。")
                 m2s = mhc2_proxy_score(pep, str(pr["allele"]))
                 m2src = "proxy"
                 m2el, m2ba, m2a2 = None, None, ""
             pre = precomputed_immuno.get(pep, {})
-            immunogenicity_deepimmuno = pre.get("immunogenicity_deepimmuno", deepimmuno_proxy(pep))
-            immunogenicity_prime = pre.get("immunogenicity_prime", prime_proxy(pep))
-            immunogenicity_repitope = pre.get("immunogenicity_repitope", repitope_proxy(pep))
-            src_deepimmuno = pre.get("immunogenicity_deepimmuno__source", "precomputed") if "immunogenicity_deepimmuno" in pre else "proxy"
-            src_prime = pre.get("immunogenicity_prime__source", "precomputed") if "immunogenicity_prime" in pre else "proxy"
-            src_repitope = pre.get("immunogenicity_repitope__source", "precomputed") if "immunogenicity_repitope" in pre else "proxy"
+            immunogenicity_deepimmuno, src_deepimmuno = _immunogenicity_value(
+                pre, pep, "immunogenicity_deepimmuno", allow_proxy_scores
+            )
+            immunogenicity_prime, src_prime = _immunogenicity_value(
+                pre, pep, "immunogenicity_prime", allow_proxy_scores
+            )
+            immunogenicity_repitope, src_repitope = _immunogenicity_value(
+                pre, pep, "immunogenicity_repitope", allow_proxy_scores
+            )
             rows.append({
                 "mutation": row.get("mutation", ""),
                 "mut_peptide": pep,
@@ -647,6 +679,9 @@ def main(
         + w3 * out["vaf_norm"]
         + w4 * out["dissimilarity_norm"]
     )
+    if require_real_immunogenicity_deepimmuno:
+        if out["immunogenicity_source_deepimmuno"].astype(str).str.lower().str.contains("proxy").any():
+            raise RuntimeError("已启用 --require_real_immunogenicity_deepimmuno，但 DeepImmuno 仍存在 proxy 来源。请提供 real_tsv 或 real_cmd 结果。")
     if require_real_immunogenicity_prime:
         if (out["immunogenicity_source_prime"].astype(str).str.lower() == "proxy").any():
             raise RuntimeError("已启用 --require_real_immunogenicity_prime，但 PRIME 仍存在 proxy 来源。请提供 real_tsv 或 real_cmd 结果。")
@@ -679,41 +714,56 @@ if __name__ == "__main__":
     parser.add_argument("--wi_repitope", type=float, default=1.0, help="immunogenicity_repitope 子权重")
     parser.add_argument(
         "--mhc2_backend",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "proxy", "real_tsv", "netmhciipan"],
-        help="MHC-II 层: auto=优先 netmhciipan，其次 real_tsv，最后 proxy；real_tsv=读取 results/<run_id>/tool_outputs/raw/mhc2_netmhciipan.tsv",
+        help="MHC-II 层：默认 real_tsv；auto=优先 netmhciipan，其次 real_tsv，失败即报错。",
     )
     parser.add_argument(
         "--backend_mhc1_netmhcpan",
-        default="auto",
+        default="real_tsv",
         choices=["auto", "real_tsv", "real_cmd", "off"],
         help="MHC-I 交叉验证 NetMHCpan 后端：auto/real_tsv/real_cmd/off",
     )
     parser.add_argument(
         "--backend_mhc1_bigmhc",
-        default="auto",
+        default="off",
         choices=["auto", "real_tsv", "real_cmd", "off"],
-        help="MHC-I 交叉验证 BigMHC 后端：auto/real_tsv/real_cmd/off",
+        help="MHC-I 交叉验证 BigMHC 后端：默认 off；可显式切换 real_tsv/real_cmd。",
     )
     parser.add_argument(
         "--require_real_mhc2",
         action="store_true",
-        help="要求 MHC-II 必须使用 netmhciipan；若回退 proxy 则直接报错退出。",
+        default=True,
+        help="要求 MHC-II 必须使用 netmhciipan；默认开启。",
     )
     parser.add_argument(
         "--require_real_mhc1_cv",
         action="store_true",
-        help="要求 NetMHCpan/BigMHC 至少一个使用真实结果（real_tsv/real_cmd）；否则报错。",
+        default=True,
+        help="要求 NetMHCpan/BigMHC 至少一个使用真实结果（real_tsv/real_cmd）；默认开启。",
     )
     parser.add_argument(
         "--require_real_immunogenicity_prime",
         action="store_true",
+        default=True,
         help="要求 PRIME 免疫原性必须为真实来源（real_tsv/real_cmd），若仍为 proxy 则报错。",
+    )
+    parser.add_argument(
+        "--require_real_immunogenicity_deepimmuno",
+        action="store_true",
+        default=True,
+        help="要求 DeepImmuno 免疫原性必须为真实来源（real_tsv/real_cmd），若仍为 proxy 则报错。",
     )
     parser.add_argument(
         "--require_real_immunogenicity_repitope",
         action="store_true",
+        default=True,
         help="要求 Repitope 免疫原性必须为真实来源（real_tsv/real_cmd），若仍为 proxy 则报错。",
+    )
+    parser.add_argument(
+        "--allow_proxy_scores",
+        action="store_true",
+        help="显式允许 MHC-II 或免疫原性缺失时使用代理分；默认禁止。",
     )
     args = parser.parse_args()
     main(
@@ -730,6 +780,8 @@ if __name__ == "__main__":
         backend_mhc1_bigmhc=args.backend_mhc1_bigmhc,
         require_real_mhc2=args.require_real_mhc2,
         require_real_mhc1_cv=args.require_real_mhc1_cv,
+        require_real_immunogenicity_deepimmuno=args.require_real_immunogenicity_deepimmuno,
         require_real_immunogenicity_prime=args.require_real_immunogenicity_prime,
         require_real_immunogenicity_repitope=args.require_real_immunogenicity_repitope,
+        allow_proxy_scores=args.allow_proxy_scores,
     )

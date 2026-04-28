@@ -5,13 +5,45 @@
 默认检查：
 - MHC-II 至少出现一行 mhc2_backend=netmhciipan
 - MHC-I 交叉验证至少一个来源列出现 real_tsv/real_cmd
+- 可选检查免疫原性三路来源不含 proxy
 """
 import os
+import json
 import argparse
 import pandas as pd
 
 
-def main(run_id: str, require_mhc2_real: bool, require_mhc1_cv_real: bool):
+def _source_has_proxy(df: pd.DataFrame, col: str) -> bool:
+    if col not in df.columns:
+        return True
+    return df[col].fillna("").astype(str).str.lower().str.contains("proxy").any()
+
+
+def _check_real_structure(run_id: str) -> bool:
+    delivery_root = os.path.join("deliveries", run_id, "to_simhub")
+    if not os.path.isdir(delivery_root):
+        return False
+    for case_id in os.listdir(delivery_root):
+        meta_path = os.path.join(delivery_root, case_id, "meta.json")
+        if not os.path.exists(meta_path):
+            continue
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        backend = str(meta.get("structure_backend", "")).lower()
+        replaces = bool(meta.get("replaces_coarse"))
+        tool_version = str(meta.get("structure_tool_version", "")).lower()
+        if backend in {"pandora", "afm"} and replaces and tool_version != "na_for_coarse":
+            return True
+    return False
+
+
+def main(
+    run_id: str,
+    require_mhc2_real: bool,
+    require_mhc1_cv_real: bool,
+    require_real_immunogenicity: bool,
+    require_real_structure: bool,
+):
     path = os.path.join("results", run_id, "peptide_mhc_ranking.csv")
     if not os.path.exists(path):
         raise FileNotFoundError(path)
@@ -41,11 +73,23 @@ def main(run_id: str, require_mhc2_real: bool, require_mhc1_cv_real: bool):
     if "mhc1_cv_tool" in df.columns:
         tools = sorted(set(",".join(df["mhc1_cv_tool"].fillna("").astype(str).tolist()).split(",")) - {""})
         print(f"[check] mhc1_cv_tool={tools}")
+    immuno_proxy = {
+        "deepimmuno": _source_has_proxy(df, "immunogenicity_source_deepimmuno"),
+        "prime": _source_has_proxy(df, "immunogenicity_source_prime"),
+        "repitope": _source_has_proxy(df, "immunogenicity_source_repitope"),
+    }
+    structure_ok = _check_real_structure(run_id)
+    print(f"[check] immunogenicity_proxy={immuno_proxy}")
+    print(f"[check] real_structure={structure_ok}")
 
     if require_mhc2_real and not mhc2_ok:
         raise RuntimeError("验收失败：MHC-II 未使用 netmhciipan。")
     if require_mhc1_cv_real and not mhc1_ok:
         raise RuntimeError("验收失败：MHC-I 交叉验证未使用真实来源（real_tsv/real_cmd）。")
+    if require_real_immunogenicity and any(immuno_proxy.values()):
+        raise RuntimeError("验收失败：免疫原性仍存在 proxy 或缺失来源列。")
+    if require_real_structure and not structure_ok:
+        raise RuntimeError("验收失败：SimHub 结构仍不是 pandora/afm 真实替换。")
 
     print("验收通过。")
 
@@ -55,6 +99,14 @@ if __name__ == "__main__":
     parser.add_argument("--run_id", required=True)
     parser.add_argument("--require_mhc2_real", action="store_true", help="要求 MHC-II 为真实后端")
     parser.add_argument("--require_mhc1_cv_real", action="store_true", help="要求 MHC-I 交叉验证为真实后端")
+    parser.add_argument("--require_real_immunogenicity", action="store_true", help="要求 DeepImmuno/PRIME/Repitope 均不含 proxy")
+    parser.add_argument("--require_real_structure", action="store_true", help="要求 SimHub 结构为 pandora/afm 真实替换")
     args = parser.parse_args()
-    main(args.run_id, args.require_mhc2_real, args.require_mhc1_cv_real)
+    main(
+        args.run_id,
+        args.require_mhc2_real,
+        args.require_mhc1_cv_real,
+        args.require_real_immunogenicity,
+        args.require_real_structure,
+    )
 

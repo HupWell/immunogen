@@ -8,7 +8,7 @@
 - deliveries/<run_id>/to_immunogen/hla_typing.json（用于 hla_allele.txt）
 
 输出（禁止使用 SDF）：
-- deliveries/<run_id>/to_simhub/<case_id>/complex.pdb   # Chain M(α) + B(β2m) + P(peptide)，粗初始构象
+- deliveries/<run_id>/to_simhub/<case_id>/complex.pdb   # Chain M(α) + B(β2m) + P(peptide)，真实结构工具输出
 - deliveries/<run_id>/to_simhub/<case_id>/hla_allele.txt  # 可选，Top1 对应 HLA
 - deliveries/<run_id>/to_simhub/<case_id>/meta.json
 - deliveries/<run_id>/to_simhub/<case_id>/selected_for_md.csv
@@ -230,9 +230,9 @@ if __name__ == "__main__":
     parser.add_argument("--top_k", type=int, default=3, help="用于 MD 验证的 Top 候选数量，默认 3")
     parser.add_argument(
         "--structure_backend",
-        default="coarse",
+        default="pandora",
         choices=["coarse", "pandora", "afm"],
-        help="结构来源：coarse(默认)/pandora/afm",
+        help="结构来源：pandora(默认)/afm/coarse；真实交付需提供 --structure_input_pdb",
     )
     parser.add_argument(
         "--structure_input_pdb",

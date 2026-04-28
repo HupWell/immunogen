@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""MUSCLE 旧参数兼容层：把 PANDORA 使用的 -in/-out 转为 MUSCLE 5 参数。"""
+import os
+import shutil
+import subprocess
+import sys
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    input_path = ""
+    output_path = ""
+    passthrough = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "-in" and i + 1 < len(args):
+            input_path = args[i + 1]
+            i += 2
+        elif arg == "-out" and i + 1 < len(args):
+            output_path = args[i + 1]
+            i += 2
+        elif arg == "-quiet":
+            i += 1
+        else:
+            passthrough.append(arg)
+            i += 1
+    real_muscle = os.environ.get("PANDORA_REAL_MUSCLE") or shutil.which("muscle.real")
+    if not real_muscle:
+        env_bin = os.path.dirname(sys.executable)
+        candidate = os.path.join(env_bin, "muscle")
+        if os.path.abspath(candidate) != os.path.abspath(sys.argv[0]):
+            real_muscle = candidate
+    if not real_muscle:
+        print("未找到真实 MUSCLE 可执行文件。", file=sys.stderr)
+        return 127
+    if input_path and output_path:
+        cmd = [real_muscle, "-align", input_path, "-output", output_path, *passthrough]
+    else:
+        cmd = [real_muscle, *args]
+    return subprocess.run(cmd, check=False).returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
