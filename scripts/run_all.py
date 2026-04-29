@@ -90,6 +90,9 @@ def main(
     linker: str,
     poly_a_len: int,
     codon_mode: str,
+    codon_real_tool: str,
+    codon_real_cmd: str,
+    codon_real_version_cmd: str,
     signal_peptide_preset: str,
     signal_peptide_aa: str,
     tm_domain_preset: str,
@@ -191,6 +194,12 @@ def main(
         str(poly_a_len),
         "--codon_mode",
         codon_mode,
+        "--codon_real_tool",
+        codon_real_tool,
+        "--codon_real_cmd",
+        codon_real_cmd,
+        "--codon_real_version_cmd",
+        codon_real_version_cmd,
         "--signal_peptide_preset",
         signal_peptide_preset,
         "--signal_peptide_aa",
@@ -285,8 +294,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--codon_mode",
         default="optimized",
-        choices=["basic", "optimized", "lineardesign"],
+        choices=["basic", "optimized", "lineardesign", "real_cmd"],
         help="密码子模式，默认 optimized",
+    )
+    parser.add_argument(
+        "--codon_real_tool",
+        default="",
+        help="codon_mode=real_cmd 时记录的真实密码子优化工具名称",
+    )
+    parser.add_argument(
+        "--codon_real_cmd",
+        default="",
+        help="codon_mode=real_cmd 时的真实密码子优化命令模板",
+    )
+    parser.add_argument(
+        "--codon_real_version_cmd",
+        default="",
+        help="真实密码子优化工具版本命令，用于记录验收元数据",
     )
     parser.add_argument("--signal_peptide_preset", default="", choices=["", "igkv", "mitd"], help="N端信号肽预设")
     parser.add_argument("--signal_peptide_aa", default="", help="N端信号肽手工AA")
@@ -387,6 +411,9 @@ if __name__ == "__main__":
         linker=args.linker,
         poly_a_len=args.poly_a_len,
         codon_mode=args.codon_mode,
+        codon_real_tool=args.codon_real_tool,
+        codon_real_cmd=args.codon_real_cmd,
+        codon_real_version_cmd=args.codon_real_version_cmd,
         signal_peptide_preset=args.signal_peptide_preset,
         signal_peptide_aa=args.signal_peptide_aa,
         tm_domain_preset=args.tm_domain_preset,

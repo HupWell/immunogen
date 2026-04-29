@@ -2,7 +2,7 @@
 
 > 负责人：梁心恬  
 > 文档目的：写清楚“已经做完什么、还没做什么、下一步先做什么”。  
-> 最近一次核对：2026-04-27
+> 最近一次核对：2026-04-29
 
 ---
 
@@ -36,6 +36,33 @@
 - [x] `R003` 全流程可跑通并完成严格验收
 - [x] `R_public_001` 已达成当前阶段严格口径（MHC-I real_cmd + MHC-II real + 免疫原性真实来源）
 
+### 5) 结构真实后端与 SimHub 交付
+- [x] PANDORA 官方模板数据库已接入：Zenodo `default.tar.gz`，864 个 MHC-I / 136 个 MHC-II 模板
+- [x] `scripts/run_pandora_structure.py` 已落地：调用真实 PANDORA + MODELLER 生成 peptide-MHC-I 结构
+- [x] `R001/R002/R003/R_public_001` 均已生成真实 PANDORA `complex.pdb`
+- [x] 四个 run 的 SimHub 交付已刷新为 `structure_backend=pandora`、`replaces_coarse=true`
+- [x] 四个 run 均通过全真实验收：MHC-I real、MHC-II real、免疫原性非 proxy、结构非 coarse
+  - 验收命令：`python scripts/check_epitope_realization.py --run_id <run_id> --require_mhc1_cv_real --require_mhc2_real --require_real_immunogenicity --require_real_structure`
+  - 归档文档：`docs/P2_PANDORA_STRUCTURE_VALIDATION_2026-04-28.md`
+
+### 6) P3-1 生产级密码子优化真实接入
+- [x] 已选定官方 LinearDesign 本机命令行接入方式：`external_refs/LinearDesign/lineardesign`
+- [x] 已增加 `real_cmd` 适配器并纳入 `build_multivalent_mrna.py --codon_mode real_cmd`
+- [x] 已输出工具名称、版本记录、真实命令、输入 FASTA、标准化输出 FASTA、stdout/stderr 日志路径
+- [x] `R001/R002/R003/R_public_001` 已完成 LinearDesign 真实密码子优化验收，且失败不会回退到内部 `basic/optimized`
+  - 执行命令：
+    ```bash
+    for r in R001 R002 R003 R_public_001; do
+      python scripts/build_multivalent_mrna.py --run_id "$r" \
+        --codon_mode real_cmd \
+        --codon_real_tool LinearDesign \
+        --codon_real_cmd "python tools/lineardesign_runner.py --lambda_value 0.3" \
+        --codon_real_version_cmd "python tools/lineardesign_runner.py --version"
+      python scripts/run_qc_and_report.py --run_id "$r"
+    done
+    ```
+  - 验收字段：`results/<run_id>/mrna_design.json` 中 `codon_optimizer.backend=real_cmd`、`tool=LinearDesign`
+
 ---
 
 ## 二、还没完成（Not Done）
@@ -44,13 +71,10 @@
 - [ ] `R_public_001`、`R002`、`R003` 的 MHC-II 当前已完成公开文献口径演示替代，但尚未替换为 BioDriver 上游患者真实 II 类分型
 - [ ] 尚未形成“BioDriver 真实 II 类分型 -> 自动重跑 -> 自动更新验收”的临床终版闭环
 
-### 2) 结构交付本体缺口
-- [x] `R001/R002/R003/R_public_001` 已使用 PANDORA 真实生成 `complex.pdb`，并完成 M/B/P 三链质量复核
-
-### 3) 任务书增强项未工程化
-- [ ] 生产级密码子优化真实接入（LinearDesign / COOL）
+### 2) 任务书增强项未工程化
 - [ ] mRNA 稳定性工具接入（Saluki / RNAsnp）
 - [ ] SimHub 回传证据自动归档闭环（`simhub_evidence/<case_id>/` 自动化）
+- [ ] ColabFold GPU 版 JAX 尚未完成（当前 `jax 0.6.2` 仅识别 CPU；PANDORA 结构链路已可用）
 
 ---
 
@@ -112,7 +136,7 @@
 - P1 替代方案 A 已完成（可用于流程展示与验收归档）
 - 临床终版仍需 BioDriver 真实 II 类分型，届时需再执行一次全量重跑
 
-### P2（当前优先推进）：结构本体替换与质量复核
+### P2（已完成）：结构本体替换与质量复核
 
 #### P2-1: 结构输入准备
 - [x] 为 `R001/R002/R003/R_public_001` 逐例确认 Top peptide-MHC 组合（来自 `selected_for_md.csv`）
@@ -145,15 +169,31 @@
 - [x] 重新检查 `deliveries/<run_id>/to_simhub/<case_id>/` 文件完整性
 - [x] 更新 `SELF_CHECK.md` 中结构后端说明
 
-### P3（第二阶段增强）
-- [ ] 接入 LinearDesign/COOL 并纳入主流程参数
-- [ ] 接入 Saluki/RNAsnp 并产出可复检指标
-- [ ] 打通 SimHub 回传证据自动归档
+### P3（当前优先推进）：第二阶段真实接口增强
+
+#### P3-1: 生产级密码子优化真实接入
+- [x] 选定 LinearDesign 的本机/命令行接入方式
+- [x] 增加 `real_cmd` 适配器，纳入 `build_multivalent_mrna.py --codon_mode`
+- [x] 输出工具版本、命令、输入输出路径，避免回退到内部简化优化时被误判为真实工具
+- [x] 为 `R001/R002/R003/R_public_001` 至少完成一次真实密码子优化验收
+
+#### P3-2: mRNA 稳定性真实工具接入
+- [ ] 选定 Saluki / RNAsnp / ViennaRNA 增强口径中的真实指标组合
+- [ ] 增加稳定性适配器并写入 `qc_metrics.json` / `REPORT.md`
+- [ ] 产出可复检字段：工具名、版本、输入序列、关键分数、日志路径
+
+#### P3-3: SimHub 回传证据自动归档
+- [ ] 定义 `results/<run_id>/simhub_evidence/<case_id>/` 自动归档契约
+- [ ] 增加回传文件完整性检查：轨迹/能量/结构稳定性摘要/日志
+- [ ] 在 `SELF_CHECK.md` 或独立验证报告中自动引用 SimHub 回传证据
+
+#### P3-4: 可选环境增强
+- [ ] 完成 ColabFold GPU 版 JAX 配置，用于 AFM 重点复核；当前 PANDORA 真实结构链路不依赖该项
 
 ---
 
 ## 四、执行约束（防回退）
 
 - [ ] 每次 `run_all` 后同步更新本文件（仅保留当前有效状态，不累计历史噪声）
-- [ ] 每次提交前至少执行一次：`python scripts/check_epitope_realization.py --run_id <run_id> --require_mhc1_cv_real --require_mhc2_real`
+- [ ] 每次提交前至少执行一次：`python scripts/check_epitope_realization.py --run_id <run_id> --require_mhc1_cv_real --require_mhc2_real --require_real_immunogenicity --require_real_structure`
 - [ ] 提交时剔除噪声变更：`.autodl/*`、`external_refs` 子仓库状态
