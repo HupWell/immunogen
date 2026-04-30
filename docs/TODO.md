@@ -1,199 +1,171 @@
-# ImmunoGen 任务书对照 TODO（重写版）
+# ImmunoGen TODO（当前状态版）
 
 > 负责人：梁心恬  
-> 文档目的：写清楚“已经做完什么、还没做什么、下一步先做什么”。  
-> 最近一次核对：2026-04-29
+> 文档目的：只保留当前有效状态、剩余阻塞和下一步动作。  
+> 最近一次核对：2026-04-30  
+> 当前结论：`R001/R002/R003/R_public_001` 已完成阶段版严格重跑；机器可读结果未发现 `proxy` / `fallback` / `coarse` 残留。
 
 ---
 
-## 一、已经完成（Done）
+## 一、当前可交付结果
 
-### 1) 主流程与交付链路
-- [x] 输入契约已落地：`deliveries/<run_id>/to_immunogen/` 的 `neoantigen_candidates.csv`、`hla_typing.json`、`meta.json`
-- [x] 一键主流程已打通：预测 -> 排序 -> 筛选 -> 多价 mRNA -> QC/报告 -> SimHub 交付
+以下内容可以作为**阶段验收版/下游技术检查版**交付：
+
+- [x] `deliveries/<run_id>/to_simhub/<case_id>/`：SimHub 交付包，包含 PANDORA 真实结构 `complex.pdb`
+- [x] `results/<run_id>/mrna_vaccine.fasta`：LinearDesign `real_cmd` 密码子优化后的 mRNA 设计
+- [x] `results/<run_id>/mrna_design.json`：mRNA 设计元数据，含工具、命令、输入输出路径
+- [x] `results/<run_id>/qc_metrics.json`：RNAfold / RNAeval / RNAplfold 稳定性指标
+- [x] `results/<run_id>/REPORT.md`、`SELF_CHECK.md`、`POSITIVE_CONTROL.md`：报告与自证材料
+- [x] `deliveries/<run_id>/to_simhub/<case_id>/dossier_context.json`：peptide + mRNA dossier manifest
+- [x] `results/<run_id>/meta.json`：本 run 自追溯摘要
+
+适用实例：
+
+- [x] `R001`
+- [x] `R002`
+- [x] `R003`
+- [x] `R_public_001`
+
+注意：`R002/R003/R_public_001` 的 HLA-II 仍是公开队列演示分型，不是 BioDriver 患者临床终版分型。
+
+---
+
+## 二、已完成
+
+### 1) 主流程
+
+- [x] 输入契约已落地：`deliveries/<run_id>/to_immunogen/neoantigen_candidates.csv`、`hla_typing.json`、`meta.json`
+- [x] 主流程已打通：输入校验 -> 免疫原性适配 -> MHC 排名 -> Top 肽筛选 -> mRNA 构建 -> QC/报告 -> SimHub 交付
 - [x] 自证材料自动生成：`POSITIVE_CONTROL.md`、`SELF_CHECK.md`、`REPORT.md`
-- [x] SimHub 分支 B 交付格式稳定：`complex.pdb` + `hla_allele.txt` + `meta.json` + `selected_for_md.csv`（无 SDF）
+- [x] SimHub 分支 B 交付格式稳定：`complex.pdb` + `hla_allele.txt` + `meta.json` + `selected_for_md.csv`
 
-### 2) P0 验收项（已全部完成）
-- [x] `R_public_001` 具备 MHC-I 真实交叉验证输入，`mhc1_cv_source_netmhcpan` 达到 `real_cmd`
-  - 路径已落实：`MHC1_NETMHCPAN_CMD` + `tools/netmhcpan_class1_runner.py`
-  - 复核命令：`source scripts/env_netmhcpan.sh && python scripts/run_all.py --run_id R_public_001 --target mhc_ranking --backend_mhc1_netmhcpan real_cmd --backend_mhc1_bigmhc off --mhc2_backend real_tsv --require_real_mhc1_cv --require_real_mhc2`
-- [x] `R_public_001` 具备 MHC-II 真实输入（当前为 `real_tsv` 路径，运行后后端为 `netmhciipan`）
-- [x] `R_public_001` 严格真实性验收已通过
-  - 验证命令：`python scripts/check_epitope_realization.py --run_id R_public_001 --require_mhc1_cv_real --require_mhc2_real`
-  - 结果要点：`mhc1_cv_source_netmhcpan=['real_cmd']`、`mhc2_real=True`
+### 2) 真实后端与防回退
 
-### 3) 免疫原性真实后端
-- [x] DeepImmuno `real_cmd` 已工程化接入：`tools/deepimmuno_runner.py` + `IMMUNO_DEEPIMMUNO_CMD`
-- [x] Repitope `real_cmd` 已工程化接入：`tools/repitope_runner.py` + `IMMUNO_REPITOPE_CMD`
-- [x] 免疫原性一键环境脚本已提供：`scripts/env_immunogenicity.sh`
-- [x] `R001` / `R002` / `R003` / `R_public_001` 已通过免疫原性严格来源校验（`--require_real_immunogenicity_prime --require_real_immunogenicity_repitope`）
-- [x] `R_public_001` 历史 `raw/repitope.tsv` 缺分数字段问题已修复并重建
+- [x] MHC-I 交叉验证：NetMHCpan `real_tsv`
+- [x] MHC-II：NetMHCIIpan `real_tsv`，运行后结果列为 `netmhciipan`
+- [x] DeepImmuno：真实来源，当前结果列为 `deepimmuno_real_cmd`
+- [x] PRIME：真实来源，当前结果列为 `prime_real_cmd`
+- [x] Repitope：公开数据集真实来源，当前结果列为 `repitope_public_dataset_exact/knn`
+- [x] BigMHC：显式 `off`，不作为代理补位
+- [x] 默认禁止 proxy / fallback 静默回退
 
-### 4) 多实例实跑状态
-- [x] `R001` 全流程可跑通并完成严格验收
-- [x] `R002` 全流程可跑通并完成严格验收
-- [x] `R003` 全流程可跑通并完成严格验收
-- [x] `R_public_001` 已达成当前阶段严格口径（MHC-I real_cmd + MHC-II real + 免疫原性真实来源）
+### 3) 结构真实后端
 
-### 5) 结构真实后端与 SimHub 交付
-- [x] PANDORA 官方模板数据库已接入：Zenodo `default.tar.gz`，864 个 MHC-I / 136 个 MHC-II 模板
-- [x] `scripts/run_pandora_structure.py` 已落地：调用真实 PANDORA + MODELLER 生成 peptide-MHC-I 结构
+- [x] PANDORA 官方模板数据库已接入：Zenodo `default.tar.gz`
+- [x] `scripts/run_pandora_structure.py` 已落地：真实 PANDORA + MODELLER 生成 peptide-MHC-I 结构
 - [x] `R001/R002/R003/R_public_001` 均已生成真实 PANDORA `complex.pdb`
-- [x] 四个 run 的 SimHub 交付已刷新为 `structure_backend=pandora`、`replaces_coarse=true`
-- [x] 四个 run 均通过全真实验收：MHC-I real、MHC-II real、免疫原性非 proxy、结构非 coarse
-  - 验收命令：`python scripts/check_epitope_realization.py --run_id <run_id> --require_mhc1_cv_real --require_mhc2_real --require_real_immunogenicity --require_real_structure`
-  - 归档文档：`docs/P2_PANDORA_STRUCTURE_VALIDATION_2026-04-28.md`
+- [x] SimHub `meta.json` 已改为 SINGLE SOURCE OF TRUTH 白名单字段，不再写入未声明的结构调试字段
+- [x] 已完成结构复核：Chain M / B / P、peptide 对齐、无 coarse 标记、非 CA-only
+- [x] `prepare_simhub_delivery.py` 已增加生产交付硬校验：coarse 标记、CA-only 比例过高、原子数过少或链数不足均会拒绝
 
-### 6) P3-1 生产级密码子优化真实接入
-- [x] 已选定官方 LinearDesign 本机命令行接入方式：`external_refs/LinearDesign/lineardesign`
-- [x] 已增加 `real_cmd` 适配器并纳入 `build_multivalent_mrna.py --codon_mode real_cmd`
-- [x] 已输出工具名称、版本记录、真实命令、输入 FASTA、标准化输出 FASTA、stdout/stderr 日志路径
-- [x] `R001/R002/R003/R_public_001` 已完成 LinearDesign 真实密码子优化验收，且失败不会回退到内部 `basic/optimized`
-  - 执行命令：
-    ```bash
-    for r in R001 R002 R003 R_public_001; do
-      python scripts/build_multivalent_mrna.py --run_id "$r" \
-        --codon_mode real_cmd \
-        --codon_real_tool LinearDesign \
-        --codon_real_cmd "python tools/lineardesign_runner.py --lambda_value 0.3" \
-        --codon_real_version_cmd "python tools/lineardesign_runner.py --version"
-      python scripts/run_qc_and_report.py --run_id "$r"
-    done
-    ```
-  - 验收字段：`results/<run_id>/mrna_design.json` 中 `codon_optimizer.backend=real_cmd`、`tool=LinearDesign`
+### 4) P3-1 生产级密码子优化
 
----
+- [x] 选定官方 LinearDesign 本机命令行接入
+- [x] `build_multivalent_mrna.py --codon_mode real_cmd` 已支持真实命令适配器
+- [x] 已记录工具名、版本命令、真实命令、输入 FASTA、输出 FASTA、stdout/stderr 日志路径
+- [x] 四个实例已完成 LinearDesign 真实验收：`codon_mode=real_cmd`、`codon_optimizer.tool=LinearDesign`
 
-## 二、还没完成（Not Done）
+### 5) P3-2 mRNA 稳定性真实工具链
 
-### 1) 数据真实性与临床终版缺口
-- [ ] `R_public_001`、`R002`、`R003` 的 MHC-II 当前已完成公开文献口径演示替代，但尚未替换为 BioDriver 上游患者真实 II 类分型
-- [ ] 尚未形成“BioDriver 真实 II 类分型 -> 自动重跑 -> 自动更新验收”的临床终版闭环
+- [x] 选定当前本机可复检口径：ViennaRNA `RNAfold` + `RNAeval` + `RNAplfold`
+- [x] 已写入 `qc_metrics.json` / `mrna_design.json` / `REPORT.md`
+- [x] 已输出可复检字段：工具版本、命令、输入 RNA/FASTA、关键分数、日志路径
+- [x] 四个实例已完成真实稳定性验收
+  - 指标：`rnafold_mfe`、`rnaeval_energy`、`mean_unpaired_l1`、`mean_unpaired_l10`
+  - 输出目录：`results/<run_id>/mrna_stability/`
 
-### 2) 任务书增强项未工程化
-- [ ] mRNA 稳定性工具接入（Saluki / RNAsnp）
-- [ ] SimHub 回传证据自动归档闭环（`simhub_evidence/<case_id>/` 自动化）
-- [ ] ColabFold GPU 版 JAX 尚未完成（当前 `jax 0.6.2` 仅识别 CPU；PANDORA 结构链路已可用）
+### 6) 最近一次全量严格复核
 
----
-
-## 三、下一步执行清单（按优先级）
-
-### P1（已完成演示替代，临床终版等待上游）
-
-> **2026-04-27 更新**：BioDriver 上游数据暂时无法获取；P1 替代方案 A 已完成，可用于流程展示。临床终版等待 BioDriver 后续提供真实 II 类分型。
-
-#### P1-1: 向 BioDriver 请求 HLA-II 分型数据【阻塞】
-- [x] 已创建数据请求文档：`docs/biodriver_hla_ii_request.md`
-- [ ] ~~等待 BioDriver 提供三个 run 的真实 HLA-II 分型~~（上游暂时无法提供，任务挂起）
-- [ ] ~~收到数据后验证格式并更新 `hla_typing.json`~~
-
-#### P1-替代方案 A：使用公开队列真实 II 类分型（演示级）
-若需在当前阶段展示"真实 II 类分型"流程（非终版临床数据），可从公开队列获取真实分型并绑定到 run：
-
-- [x] 方案 A1：选用 TCGA-SKCM 公开研究口径（Dhall et al., 2020）的 HLA-II 类型范围，完成三个 run 的演示绑定
-  - 来源：Dhall et al. 2020（PMC7113398）公开说明（II 类包含 DRB1/DQB1/DPB1）
-  - 已执行：
-    1. 更新 `deliveries/R_public_001/to_immunogen/hla_typing.json`
-    2. 更新 `deliveries/R002/to_immunogen/hla_typing.json`
-    3. 更新 `deliveries/R003/to_immunogen/hla_typing.json`
-    4. 重跑严格链路并归档日志到 `results/<run>/validation_logs/`
-- [x] 方案 A2：明确声明"演示数据替代"口径
-  - 已在三个 run 的 `SELF_CHECK.md` 中注明："公开队列数据，非患者真实临床终版分型"
-
-#### P1-2: 重建 MHC-II 预测并重新验收【已完成（演示口径）】
-- [x] 使用替代方案 A 的 II 类分型完成 `mhc2_netmhciipan.tsv` 重建并重跑
-- [x] 三个 run 重新执行严格链路并归档验收结果
-  - 归档文档：`docs/P1_ALTERNATIVE_A_VALIDATION_2026-04-27.md`
-  - 执行命令（预备）：
-    ```bash
-    for r in R_public_001 R002 R003; do
-      source scripts/env_netmhcpan.sh
-      python scripts/run_all.py --run_id $r --target full \
-        --backend_mhc1_netmhcpan real_cmd --backend_mhc1_bigmhc off \
-        --mhc2_backend real_tsv --require_real_mhc1_cv --require_real_mhc2 \
-        --require_real_immunogenicity_prime --require_real_immunogenicity_repitope
-    done
-    ```
-  - 验收命令（预备）：
-    ```bash
-    for r in R_public_001 R002 R003; do
-      python scripts/check_epitope_realization.py --run_id $r \
-        --require_mhc1_cv_real --require_mhc2_real
-    done
-    ```
-
-#### P1-3: 更新自证文档【已完成（演示口径）】
-- [x] 更新 `R_public_001/SELF_CHECK.md`（添加 II 类来源声明）
-- [x] 更新 `R002/SELF_CHECK.md`
-- [x] 更新 `R003/SELF_CHECK.md`
-- [x] 更新本 TODO.md（记录 P1 替代方案 A 执行结果）
+- [x] 已重新运行四个实例完整链路
+- [x] 已补齐任务书 3.4 要求的 `dossier_context.json`
+- [x] 已补齐 `results/<run_id>/meta.json` 与 `simhub_evidence/<case_id>/README.md` 回传占位契约
+- [x] 已按 SimHub SINGLE SOURCE OF TRUTH 修复 peptide-MHC `meta.json`：补齐共享必填字段，并移除未声明字段，避免 `E_META_INCOMPLETE`
+- [x] 已执行严格验收：
+  ```bash
+  for r in R001 R002 R003 R_public_001; do
+    python scripts/check_epitope_realization.py --run_id "$r" \
+      --require_mhc1_cv_real \
+      --require_mhc2_real \
+      --require_real_immunogenicity \
+      --require_real_structure
+  done
+  ```
+- [x] 已字段级扫描关键交付文件，未发现实际交付包中的 coarse 文件头或联通测试说明
 
 ---
 
-**当前结论**：
-- P1 替代方案 A 已完成（可用于流程展示与验收归档）
-- 临床终版仍需 BioDriver 真实 II 类分型，届时需再执行一次全量重跑
+## 三、仍未完成
 
-### P2（已完成）：结构本体替换与质量复核
+### 1) 临床终版数据闭环【上游阻塞】
 
-#### P2-1: 结构输入准备
-- [x] 为 `R001/R002/R003/R_public_001` 逐例确认 Top peptide-MHC 组合（来自 `selected_for_md.csv`）
-- [x] 生成/复核结构建模输入序列（MHC-I alpha、B2M、peptide）
-- [x] 明确每个 case 的建模后端：优先 PANDORA 批量，AFM 重点复核
-  - 归档文档：`docs/P2_STRUCTURE_INPUTS_2026-04-27.md`
-  - 修正记录：`prepare_mhc_chain_sequences.py` 已改为优先使用 Top HLA-I 等位基因生成 alpha 链输入
+- [ ] 等待 BioDriver 提供患者真实 HLA-II 分型
+- [ ] 将 `R002/R003/R_public_001` 的公开队列演示分型替换为 BioDriver 患者真实 II 类分型
+- [ ] 替换后自动重跑：MHC-II -> 排名 -> 筛选 -> mRNA -> QC -> SimHub -> 自证
+- [ ] 形成“BioDriver 真实 II 类分型 -> 自动重跑 -> 自动更新验收”的临床终版闭环
 
-#### P2-2: 高精度结构本体替换
-- [x] 安装结构建模环境（只安装真实工具，不生成伪造结构）
-  - 归档文档：`docs/P2_STRUCTURE_ENV_SETUP_2026-04-28.md`
-  - 已可用：`pandora_src` 环境、`MUSCLE 5.2`、系统 `blastp/makeblastdb 2.9.0+`
-  - 已可用：`colabfold` 环境与 `colabfold_batch` 命令入口
-  - 已配置：MODELLER 真实 license key（不记录明文）
-  - 已修复：`csb-pandora 0.9` 的 Biopython 兼容问题与 IMGT HTTPS 下载问题
-  - 已完成：下载 Zenodo 官方 PANDORA 数据库 `default.tar.gz`，并接入 864 个 MHC-I / 136 个 MHC-II 模板
-  - 待增强：ColabFold GPU 版 JAX（当前 `jax 0.6.2` 仅识别 CPU）
-- [x] 用 PANDORA 生成 `R001/R002/R003/R_public_001` 真实 peptide-MHC 复合物
-- [x] 替换 `deliveries/<run_id>/to_simhub/<case_id>/complex.pdb`
-- [x] 更新 `meta.json`：`structure_backend=pandora`、`structure_tool_version`、`replaces_coarse=true`
+### 2) P3-3 SimHub 回传证据自动归档
 
-#### P2-3: 结构质量复核
-- [x] 检查 `complex.pdb` 是否包含 Chain M / B / P
-- [x] 检查 peptide 是否与 `selected_for_md.csv` 对齐
-- [x] 检查是否仍有 `coarse_initial_complex` / `na_for_coarse` / `replaces_coarse=false`
-- [x] 归档结构复核记录：`docs/P2_PANDORA_STRUCTURE_VALIDATION_2026-04-28.md`
+- [x] 定义归档契约：`results/<run_id>/simhub_evidence/<case_id>/`
+- [x] 当前未回传状态已用 `README.md` 标记为 `not_returned`
+- [x] 增加回传文件完整性检查：轨迹、能量、结构稳定性摘要、日志
+- [x] 在 `SELF_CHECK.md` 和独立 `SIMHUB_EVIDENCE.md` 中自动引用 SimHub 回传证据
+- [x] 标记下游检查状态：`not_returned` / `returned_unvalidated` / `validation_passed` / `validation_failed`
 
-#### P2-4: SimHub 交付刷新
-- [x] 重新运行 `prepare_simhub_delivery.py`（非 coarse 后端）
-- [x] 重新检查 `deliveries/<run_id>/to_simhub/<case_id>/` 文件完整性
-- [x] 更新 `SELF_CHECK.md` 中结构后端说明
+### 3) P3-4 ColabFold GPU 环境增强【非主链路阻塞】
 
-### P3（当前优先推进）：第二阶段真实接口增强
+- [x] 修复 GPU 版 JAX 配置，使 `colabfold_batch` 能识别 GPU
+- [x] 用 AFM / ColabFold 对重点候选 `R_public_001/public_case_001` 做结构复核
+- [x] 将 AFM 复核 PDB 与 PANDORA PDB 的差异记录进验证报告：`docs/P3_4_AFM_REVIEW_R_PUBLIC_001_2026-04-30.md`
+- [x] 已记录当前验证状态：`docs/P3_4_COLABFOLD_GPU_VALIDATION_2026-04-29.md`
 
-#### P3-1: 生产级密码子优化真实接入
-- [x] 选定 LinearDesign 的本机/命令行接入方式
-- [x] 增加 `real_cmd` 适配器，纳入 `build_multivalent_mrna.py --codon_mode`
-- [x] 输出工具版本、命令、输入输出路径，避免回退到内部简化优化时被误判为真实工具
-- [x] 为 `R001/R002/R003/R_public_001` 至少完成一次真实密码子优化验收
+### 4) 可选增强
 
-#### P3-2: mRNA 稳定性真实工具接入
-- [ ] 选定 Saluki / RNAsnp / ViennaRNA 增强口径中的真实指标组合
-- [ ] 增加稳定性适配器并写入 `qc_metrics.json` / `REPORT.md`
-- [ ] 产出可复检字段：工具名、版本、输入序列、关键分数、日志路径
-
-#### P3-3: SimHub 回传证据自动归档
-- [ ] 定义 `results/<run_id>/simhub_evidence/<case_id>/` 自动归档契约
-- [ ] 增加回传文件完整性检查：轨迹/能量/结构稳定性摘要/日志
-- [ ] 在 `SELF_CHECK.md` 或独立验证报告中自动引用 SimHub 回传证据
-
-#### P3-4: 可选环境增强
-- [ ] 完成 ColabFold GPU 版 JAX 配置，用于 AFM 重点复核；当前 PANDORA 真实结构链路不依赖该项
+- [ ] Saluki / RNAsnp 后续可作为额外稳定性工具接入；当前 ViennaRNA 增强口径已满足本机真实稳定性验收
+- [ ] BigMHC 可作为额外 MHC-I 交叉验证增强；当前 NetMHCpan `real_tsv` 已满足必需真实交叉验证
+- [ ] 整理 Git 工作区中的本机噪声和外部工具目录，避免误提交 `.autodl/`、`external_refs/`、下载缓存等
 
 ---
 
-## 四、执行约束（防回退）
+## 四、下一步优先级
 
-- [ ] 每次 `run_all` 后同步更新本文件（仅保留当前有效状态，不累计历史噪声）
-- [ ] 每次提交前至少执行一次：`python scripts/check_epitope_realization.py --run_id <run_id> --require_mhc1_cv_real --require_mhc2_real --require_real_immunogenicity --require_real_structure`
-- [ ] 提交时剔除噪声变更：`.autodl/*`、`external_refs` 子仓库状态
+1. **等待 SimHub 回传 MD 结果**
+   输入包已交付，后续需要接收轨迹、能量、RMSD、QC flags 和 summary。
+
+2. **等待 BioDriver HLA-II 临床终版数据**  
+   数据到位后做全量重跑和临床终版自证。
+
+3. **可选：提升 AFM 复核质量**  
+   当前 AFM 已跑通但置信度低；如需替换结构，建议增加 MSA、recycle、model/seed 后重新筛选。
+
+---
+
+## 五、防回退检查命令
+
+严格验收：
+
+```bash
+for r in R001 R002 R003 R_public_001; do
+  python scripts/check_epitope_realization.py --run_id "$r" \
+    --require_mhc1_cv_real \
+    --require_mhc2_real \
+    --require_real_immunogenicity \
+    --require_real_structure
+done
+```
+
+关键结果字段扫描：
+
+```bash
+rg "proxy|fallback_profile|coarse_initial_complex|na_for_coarse|structure_backend\"\\s*:\\s*\"coarse\"" \
+  results/{R001,R002,R003,R_public_001} \
+  deliveries/{R001,R002,R003,R_public_001}/to_simhub
+rg "COARSE PEPTIDE-MHC COMPLEX|coarse CA trace|Replace with AlphaFold-Multimer|仅用于流程联通|生产环境请用 AlphaFold-Multimer" \
+  deliveries/{R001,R002,R003,R_public_001}/to_simhub
+```
+
+提交前注意：
+
+- [ ] 不提交 `.autodl/*`
+- [ ] 不提交未授权再分发的 `external_refs/LinearDesign/`
+- [ ] 不提交下载缓存和大型外部数据库
+- [ ] 若提交代码，先检查 `git diff --cached`

@@ -16,6 +16,7 @@
 import os
 import json
 import argparse
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -62,12 +63,34 @@ def write_positive_control(run_id: str, out_dir: str, selected: pd.DataFrame):
     print(f"完成: {path}")
 
 
+def collect_simhub_evidence_status(run_id: str, out_dir: str) -> str:
+    """汇总 SimHub 回传证据状态，供 SELF_CHECK 自动引用。"""
+    root = Path(out_dir) / "simhub_evidence"
+    if not root.exists():
+        return "- SimHub evidence：`not_returned`（尚未创建回传证据目录）"
+    rows = []
+    for status_file in sorted(root.glob("*/evidence_status.json")):
+        data = load_json(str(status_file))
+        case_id = data.get("case_id", status_file.parent.name)
+        status = data.get("status", "not_returned")
+        label = data.get("status_label", "未返回")
+        report = status_file.parent / "SIMHUB_EVIDENCE.md"
+        rows.append(f"- `{case_id}`：`{status}`（{label}），报告 `{report}`")
+    if not rows:
+        for case_dir in sorted(p for p in root.glob("*") if p.is_dir()):
+            rows.append(f"- `{case_dir.name}`：`not_returned`（未返回），报告 `not_generated`")
+    return "\n".join(rows) if rows else "- SimHub evidence：`not_returned`"
+
+
 def write_self_check(
     run_id: str, out_dir: str, qc: dict, ranking: Optional[pd.DataFrame] = None,
 ):
     """双工具评分、阈值与已知局限的自证说明。"""
     mfe = qc.get("rnafold_mfe")
     rf_status = qc.get("rnafold_status", "unknown")
+    stability_status = qc.get("mrna_stability_status", "not_run")
+    stability_metrics = qc.get("mrna_stability_metrics", {})
+    simhub_evidence_note = collect_simhub_evidence_status(run_id, out_dir)
     mhc2_note = "（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列应为 netmhciipan；proxy 不再作为默认验收口径）"
     immuno_note = "免疫原性来源：未读取到来源列，默认按未通过真实来源验收解释。"
     if ranking is not None:
@@ -102,6 +125,7 @@ def write_self_check(
 | MHC-I 亲和力 | **MHCflurry**（`Class1AffinityPredictor`） | 肽–HLA-I 结合强度排序 |
 | {mhc2_row} |
 | mRNA 二级结构 / MFE | **ViennaRNA**（优先 `RNAfold` 命令，否则 Python `RNA` 绑定） | MFE 与 dot-bracket，用于质控图与 `mrna_design.json` |
+| mRNA 稳定性 / 局部可及性 | **ViennaRNA**（`RNAfold` + `RNAeval` + `RNAplfold`） | 全局 MFE、结构能量复核、局部非配对概率 |
 
 - {mhc2_note}
 - {immuno_note}
@@ -118,6 +142,9 @@ def write_self_check(
 
 - `rnafold_status`：**{rf_status}**
 - `rnafold_mfe`（若已计算）：**{mfe if mfe is not None else "NA"}**
+- `mrna_stability_status`：**{stability_status}**
+- `RNAplfold mean_unpaired_l1`：**{stability_metrics.get("mean_unpaired_l1", "NA")}**
+- `RNAplfold mean_unpaired_l10`：**{stability_metrics.get("mean_unpaired_l10", "NA")}**
 
 ## 4. 已知局限（须在汇报中声明）
 
@@ -136,6 +163,10 @@ def write_self_check(
 ## 5. 与任务书对齐
 
 - 先完成本目录下 **POSITIVE_CONTROL.md**、**SELF_CHECK.md** 与 **REPORT.md**，再提交 Simulation Hub 交付包（见 `deliveries/<run_id>/to_simhub/`）。
+
+## 5.1 SimHub 回传证据状态
+
+{simhub_evidence_note}
 
 ## 6. IEDB 资源（人工复核入口）
 

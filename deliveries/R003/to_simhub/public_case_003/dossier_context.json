@@ -1,0 +1,23 @@
+{
+  "candidate_id": "R003:public_case_003:ARHGGWTTK",
+  "therapy_line": "mRNA_vaccine",
+  "peptide": {
+    "mut_peptide": "ARHGGWTTK",
+    "wt_peptide": "AHHGGWTTK",
+    "hla_allele": "HLA-A*02:01",
+    "mutation": "PIK3CA_H1047R",
+    "variant_vaf": 0.18
+  },
+  "scores": {
+    "affinity_nM": "not_provided",
+    "immunogenicity": "not_provided",
+    "wt_dissimilarity": 0.1111111111111111,
+    "rank_score": 0.075
+  },
+  "mrna_materials": {
+    "mrna_fasta": "results/R003/mrna_vaccine.fasta",
+    "utr_orf_polyA_design": "results/R003/mrna_design.json",
+    "modification_strategy": "N1-methylpseudouridine"
+  },
+  "target_rationale": "Top peptide-MHC candidate selected by ImmunoGen rank_score; mRNA materials point to the multivalent vaccine design for this run."
+}

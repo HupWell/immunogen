@@ -1,0 +1,11 @@
+【说明】本目录为「MHC-I 交叉验证表」的列名/格式样例，勿与单一次临床解读混为一谈。
+
+1) mhc1_netmhcpan.tsv
+   数值与行列来自 runs 中 R001 的 NetMHCpan real_cmd（netMHCpan-4.2，带 -BA）输出拷贝；
+   单位 Aff(nM)，与 results/R001/tool_outputs/raw/mhc1_netmhcpan.tsv 中 affinity_nM 列一致（略去重复列 mhc1_cv_netmhcpan_nM）。
+
+2) mhc1_bigmhc.tsv
+   本仓库未接入 BigMHC 实跑。表中 mhc1_cv_bigmhc_score 为对同批 Aff(nM) 的单调归一化演示分：
+   score = 1 / (1 + nM/2000)，仅用于占位列与本地联调；正式交付请改为 BigMHC real_tsv 或 real_cmd 输出。
+
+3) 若 R001 重跑后 Aff(nM) 变化，可同步从 results/R001/.../mhc1_netmhcpan.tsv 再覆盖本目录 netmhcpan 表，并按同一公式重算本目录 bigmhc 演示分。

@@ -1,5 +1,5 @@
 {
-  "description": "把 PRIME 补充表里真实列名映射到 peptide/score。复制本文件为 column_mapping.json 后生效。",
+  "description": "与同目录下 column_mapping.json 一致。指向本目录真实文件 TableS4.csv（作者补充表，非占位）。将本文件复制为 column_mapping.json 时若已存在可跳过。",
   "mappings": [
     {
       "file": "TableS4.csv",

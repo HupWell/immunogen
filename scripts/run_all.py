@@ -251,15 +251,21 @@ def main(
         "--top_n",
         str(feasibility_top_n),
     ]
+    step10 = [
+        python_exe,
+        os.path.join(scripts_dir, "check_simhub_evidence.py"),
+        "--run_id",
+        run_id,
+    ]
 
     if require_real_mhc1_cv and backend_mhc1_netmhcpan == "off" and backend_mhc1_bigmhc == "off":
         raise RuntimeError("已启用 --require_real_mhc1_cv，但两个 MHC-I 交叉验证后端均为 off。")
 
     pipelines = {
-        "full": [step1, step2, step3, step4, step5, step6, step7, step8, step9],
+        "full": [step1, step2, step3, step4, step5, step6, step8, step10, step7, step9],
         "mhc_ranking": [step1, step2, step3],
-        "report": [step6, step7],
-        "simhub": [step8],
+        "report": [step6, step10, step7],
+        "simhub": [step8, step10, step7],
         "feasibility": [step9],
     }
     selected = pipelines[target]
@@ -330,7 +336,7 @@ if __name__ == "__main__":
         choices=["coarse", "pandora", "afm"],
         help="SimHub 结构来源：pandora(默认)/afm/coarse；真实交付需提供 --structure_input_pdb",
     )
-    parser.add_argument("--structure_input_pdb", default="", help="若 structure_backend 非 coarse，提供外部 PDB 路径")
+    parser.add_argument("--structure_input_pdb", default="", help="structure_backend 为 pandora/afm 时必须提供外部全原子 PDB 路径")
     parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
     parser.add_argument(
         "--mhc2_backend",

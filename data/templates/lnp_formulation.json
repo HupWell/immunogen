@@ -1,25 +1,26 @@
 {
   "version": "0.1",
-  "stage": "template_only",
-  "note": "LNP 配方模板，当前不参与序列流水线计算。",
+  "stage": "example_from_literature",
+  "note": "以下为公开文献/工艺综述中常见的可电离脂质纳米颗粒 molar% 级示例，非本流水线索引到的某个具体临床批次。当前仍不参与序列流水线，仅作交付侧配方占位。",
   "lipids": {
-    "ionizable_lipid": "",
-    "helper_lipid": "",
-    "cholesterol": "",
-    "peg_lipid": ""
+    "ionizable_lipid": "exemplar ionizable cationic lipid (SM-102 class)",
+    "helper_lipid": "DSPC",
+    "cholesterol": "cholesterol",
+    "peg_lipid": "DMG-PEG2k"
   },
   "ratios_molar_percent": {
-    "ionizable_lipid": null,
-    "helper_lipid": null,
-    "cholesterol": null,
-    "peg_lipid": null
+    "ionizable_lipid": 50.0,
+    "helper_lipid": 10.0,
+    "cholesterol": 38.5,
+    "peg_lipid": 1.5
   },
   "process": {
-    "np_ratio": null,
-    "target_particle_size_nm": null,
-    "buffer": "",
-    "mixing_method": ""
+    "np_ratio": 5.0,
+    "target_particle_size_nm": 80,
+    "buffer": "PBS 或组方缓冲（按工艺）",
+    "mixing_method": "微流控 / T 型混合 等，按 SOP"
   },
-  "references": []
+  "references": [
+    "Hou et al. LNP 配方综述/工艺文献中的 molar% 量纲与比例常见区间（示例值仅作工程占位，非受试者数据）。"
+  ]
 }
-

@@ -7,6 +7,7 @@
 | MHC-I 亲和力 | **MHCflurry**（`Class1AffinityPredictor`） | 肽–HLA-I 结合强度排序 |
 | MHC-II | **NetMHCIIpan**（子进程，见 `netmhciipan_runner.py`；列 `mhc2_el_rank` / `mhc2_ba_nm`） | 真实 II 类预测时 EL %Rank 等；仍须声明工具版本与等位基因写法 |
 | mRNA 二级结构 / MFE | **ViennaRNA**（优先 `RNAfold` 命令，否则 Python `RNA` 绑定） | MFE 与 dot-bracket，用于质控图与 `mrna_design.json` |
+| mRNA 稳定性 / 局部可及性 | **ViennaRNA**（`RNAfold` + `RNAeval` + `RNAplfold`） | 全局 MFE、结构能量复核、局部非配对概率 |
 
 - 本轮 MHC-II 行统计 netmhciipan: 198。（`peptide_mhc_ranking.csv` 中 `mhc2_backend` 列应为 netmhciipan；proxy 不再作为默认验收口径）
 - 免疫原性来源统计：immunogenicity_source_deepimmuno=deepimmuno_real_cmd:198；immunogenicity_source_prime=prime_real_cmd:198；immunogenicity_source_repitope=repitope_public_dataset_knn:186，repitope_public_dataset_exact:12
@@ -21,8 +22,11 @@
 
 ## 3. 本轮 RNA 折叠状态
 
-- `rnafold_status`：**fallback_profile**
-- `rnafold_mfe`（若已计算）：**NA**
+- `rnafold_status`：**ok**
+- `rnafold_mfe`（若已计算）：**-274.5**
+- `mrna_stability_status`：**ok**
+- `RNAplfold mean_unpaired_l1`：**0.438802**
+- `RNAplfold mean_unpaired_l10`：**0.241025**
 
 ## 4. 已知局限（须在汇报中声明）
 
@@ -41,6 +45,10 @@
 ## 5. 与任务书对齐
 
 - 先完成本目录下 **POSITIVE_CONTROL.md**、**SELF_CHECK.md** 与 **REPORT.md**，再提交 Simulation Hub 交付包（见 `deliveries/<run_id>/to_simhub/`）。
+
+## 5.1 SimHub 回传证据状态
+
+- `public_case_001`：`not_returned`（未返回），报告 `results/R_public_001/simhub_evidence/public_case_001/SIMHUB_EVIDENCE.md`
 
 ## 6. IEDB 资源（人工复核入口）
 

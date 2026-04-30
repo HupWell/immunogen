@@ -8,6 +8,7 @@ import os
 import json
 import argparse
 import subprocess
+import tempfile
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -36,6 +37,7 @@ def gc_content(seq: str) -> float:
 
 def build_qc_json(run_id: str, out_dir: str, sequence: str, design: dict) -> str:
     """生成基础质控 JSON，便于后续流程读取。"""
+    stability = design.get("mrna_stability", {})
     qc = {
         "run_id": run_id,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -51,6 +53,10 @@ def build_qc_json(run_id: str, out_dir: str, sequence: str, design: dict) -> str
         "rnafold_status": design.get("rnafold_status", "not_run"),
         "rnafold_note": design.get("rnafold_note", ""),
         "rnafold_mfe": design.get("rnafold_mfe"),
+        "mrna_stability_status": stability.get("status", "not_run"),
+        "mrna_stability_tools": stability.get("tools", []),
+        "mrna_stability_metrics": stability.get("metrics", {}),
+        "mrna_stability_files": stability.get("files", {}),
     }
     out_file = os.path.join(out_dir, "qc_metrics.json")
     with open(out_file, "w", encoding="utf-8") as f:
@@ -114,6 +120,183 @@ def run_rnafold(sequence: str):
         return None, None
 
 
+def _run_version(cmd):
+    """读取外部工具版本，便于下游复检。"""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return ""
+    output = (result.stdout or result.stderr or "").strip()
+    return output.splitlines()[0] if output else ""
+
+
+def _parse_rnaeval_energy(stdout: str):
+    for line in stdout.splitlines():
+        if "(" not in line or ")" not in line:
+            continue
+        try:
+            return float(line.rsplit("(", 1)[1].split(")", 1)[0].strip())
+        except (ValueError, IndexError):
+            continue
+    return None
+
+
+def _summarize_lunp(path: str):
+    """汇总 RNAplfold 非配对概率，作为局部可及性真实指标。"""
+    values_l1 = []
+    values_l10 = []
+    values_all = []
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 2 or not parts[0].isdigit():
+                continue
+            nums = []
+            for item in parts[1:]:
+                if item == "NA":
+                    continue
+                try:
+                    nums.append(float(item))
+                except ValueError:
+                    continue
+            if nums:
+                values_l1.append(nums[0])
+                values_all.extend(nums)
+                if len(nums) >= 10:
+                    values_l10.append(nums[9])
+
+    def avg(values):
+        return round(sum(values) / len(values), 6) if values else None
+
+    return {
+        "mean_unpaired_l1": avg(values_l1),
+        "mean_unpaired_l10": avg(values_l10),
+        "mean_unpaired_all_windows": avg(values_all),
+        "positions_with_l1": len(values_l1),
+    }
+
+
+def run_mrna_stability_tools(out_dir: str, sequence: str, structure: str, mfe):
+    """
+    运行真实 mRNA 稳定性工具链。
+
+    当前采用 ViennaRNA 增强口径：RNAfold 给出全局 MFE，RNAeval 复核该结构能量，
+    RNAplfold 输出局部非配对概率，作为局部可及性/结构稳定性指标。
+    """
+    stability_dir = os.path.join(out_dir, "mrna_stability")
+    os.makedirs(stability_dir, exist_ok=True)
+    input_fasta = os.path.join(stability_dir, "input_mrna.fasta")
+    input_rna = os.path.join(stability_dir, "input_mrna.rna")
+    rnafold_stdout = os.path.join(stability_dir, "rnafold.stdout.txt")
+    rnaeval_stdout = os.path.join(stability_dir, "rnaeval.stdout.txt")
+    rnaplfold_stdout = os.path.join(stability_dir, "rnaplfold.stdout.txt")
+    rnaplfold_stderr = os.path.join(stability_dir, "rnaplfold.stderr.txt")
+
+    rna_seq = sequence.replace("T", "U")
+    with open(input_fasta, "w", encoding="utf-8") as f:
+        f.write(">mrna_design\n")
+        for i in range(0, len(rna_seq), 80):
+            f.write(rna_seq[i:i + 80] + "\n")
+    with open(input_rna, "w", encoding="utf-8") as f:
+        f.write(rna_seq + "\n")
+
+    tools = [
+        {"name": "RNAfold", "version": _run_version(["RNAfold", "--version"])},
+        {"name": "RNAeval", "version": _run_version(["RNAeval", "--version"])},
+        {"name": "RNAplfold", "version": _run_version(["RNAplfold", "--version"])},
+    ]
+    commands = {}
+    metrics = {
+        "rnafold_mfe": mfe,
+        "rnaeval_energy": None,
+    }
+
+    rnafold_cmd = ["RNAfold", "--noPS"]
+    commands["rnafold"] = rnafold_cmd
+    try:
+        rnafold_result = subprocess.run(
+            rnafold_cmd, input=rna_seq + "\n", capture_output=True, text=True, check=False
+        )
+        with open(rnafold_stdout, "w", encoding="utf-8") as f:
+            f.write(rnafold_result.stdout or "")
+        if rnafold_result.returncode != 0:
+            raise RuntimeError(rnafold_result.stderr.strip())
+    except FileNotFoundError as exc:
+        raise RuntimeError("未找到 RNAfold，无法完成真实 mRNA 稳定性评估。") from exc
+
+    if structure:
+        rnaeval_cmd = ["RNAeval"]
+        commands["rnaeval"] = rnaeval_cmd
+        try:
+            rnaeval_result = subprocess.run(
+                rnaeval_cmd,
+                input=f"{rna_seq}\n{structure}\n",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            with open(rnaeval_stdout, "w", encoding="utf-8") as f:
+                f.write(rnaeval_result.stdout or "")
+            if rnaeval_result.returncode != 0:
+                raise RuntimeError(rnaeval_result.stderr.strip())
+            metrics["rnaeval_energy"] = _parse_rnaeval_energy(rnaeval_result.stdout or "")
+        except FileNotFoundError as exc:
+            raise RuntimeError("未找到 RNAeval，无法完成真实 mRNA 稳定性复核。") from exc
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        window = min(240, max(80, len(rna_seq)))
+        span = min(160, window)
+        rnaplfold_cmd = ["RNAplfold", "-u", "30", "-W", str(window), "-L", str(span)]
+        commands["rnaplfold"] = rnaplfold_cmd
+        try:
+            rnaplfold_result = subprocess.run(
+                rnaplfold_cmd,
+                input=rna_seq + "\n",
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=tmpdir,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("未找到 RNAplfold，无法完成真实局部可及性评估。") from exc
+        with open(rnaplfold_stdout, "w", encoding="utf-8") as f:
+            f.write(rnaplfold_result.stdout or "")
+        with open(rnaplfold_stderr, "w", encoding="utf-8") as f:
+            f.write(rnaplfold_result.stderr or "")
+        if rnaplfold_result.returncode != 0:
+            raise RuntimeError(f"RNAplfold 执行失败: {rnaplfold_stderr}")
+        lunp_src = os.path.join(tmpdir, "plfold_lunp")
+        lunp_out = os.path.join(stability_dir, "rnaplfold_lunp.tsv")
+        if not os.path.exists(lunp_src):
+            raise RuntimeError("RNAplfold 未生成 plfold_lunp 输出。")
+        with open(lunp_src, "r", encoding="utf-8") as src, open(lunp_out, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+        metrics.update(_summarize_lunp(lunp_out))
+
+    files = {
+        "input_fasta": input_fasta,
+        "input_rna": input_rna,
+        "rnafold_stdout": rnafold_stdout,
+        "rnaeval_stdout": rnaeval_stdout,
+        "rnaplfold_stdout": rnaplfold_stdout,
+        "rnaplfold_stderr": rnaplfold_stderr,
+        "rnaplfold_lunp": os.path.join(stability_dir, "rnaplfold_lunp.tsv"),
+    }
+    return {
+        "status": "ok",
+        "note": "ViennaRNA 真实稳定性工具链计算成功：RNAfold + RNAeval + RNAplfold。",
+        "tools": tools,
+        "commands": commands,
+        "metrics": metrics,
+        "files": files,
+    }
+
+
 def draw_secondary_structure_figure(out_dir: str, sequence: str, structure: str, mfe):
     """绘制二级结构轮廓图（真实 RNAfold 或回退 profile）。"""
     fig_dir = os.path.join(out_dir, "figures")
@@ -159,6 +342,13 @@ def write_report(
     full_length = design.get("quality_metrics", {}).get("full_length", "NA")
     gc_percent = design.get("quality_metrics", {}).get("gc_percent", "NA")
     selected_count = design.get("selected_peptide_count", len(selected_df))
+    stability = design.get("mrna_stability", {})
+    stability_metrics = stability.get("metrics", {})
+    stability_tools = ", ".join(
+        f"{x.get('name')} {x.get('version', '')}".strip()
+        for x in stability.get("tools", [])
+    ) or "NA"
+    stability_files = stability.get("files", {})
     # 避免依赖 tabulate，使用 CSV 文本块展示前 10 条
     top_preview = selected_df.head(10).to_csv(index=False)
 
@@ -199,6 +389,16 @@ def write_report(
 - 当前已输出真实热图；RNAfold 若可用会写入 MFE，否则使用回退 profile 图。
 - 信号肽/TM 可选项为工程接口，具体序列应由实验方案确定（本报告仅记录参数与长度）。
 - 基础质控 JSON：`{os.path.basename(qc_file)}`
+
+## 5.1 mRNA 稳定性真实工具链
+- 状态：`{stability.get("status", "not_run")}`
+- 工具：`{stability_tools}`
+- RNAfold MFE：`{stability_metrics.get("rnafold_mfe", "NA")}`
+- RNAeval 复核能量：`{stability_metrics.get("rnaeval_energy", "NA")}`
+- RNAplfold 平均单碱基非配对概率：`{stability_metrics.get("mean_unpaired_l1", "NA")}`
+- RNAplfold 平均 10nt 非配对概率：`{stability_metrics.get("mean_unpaired_l10", "NA")}`
+- 稳定性输入：`{stability_files.get("input_fasta", "NA")}`
+- RNAplfold 输出：`{stability_files.get("rnaplfold_lunp", "NA")}`
 
 ## 6. 信号肽与表达定位（简述）
 - 如启用 N 端信号肽，常见目的是促进分泌/加工路径，提高抗原递呈机会；最终方案需结合实验体系验证。
@@ -243,6 +443,7 @@ def main(run_id: str):
         design["rnafold_status"] = "ok"
         design["rnafold_note"] = "RNAfold 计算成功。"
         design["rnafold_mfe"] = mfe
+        design["mrna_stability"] = run_mrna_stability_tools(out_dir, sequence, structure, mfe)
     with open(design_file, "w", encoding="utf-8") as f:
         json.dump(design, f, ensure_ascii=False, indent=2)
 

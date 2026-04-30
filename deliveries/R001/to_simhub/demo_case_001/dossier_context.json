@@ -1,0 +1,23 @@
+{
+  "candidate_id": "R001:demo_case_001:HMTEVVRHC",
+  "therapy_line": "mRNA_vaccine",
+  "peptide": {
+    "mut_peptide": "HMTEVVRHC",
+    "wt_peptide": "HMTEVVRRC",
+    "hla_allele": "HLA-A*02:01",
+    "mutation": "TP53_R175H_1",
+    "variant_vaf": 0.21
+  },
+  "scores": {
+    "affinity_nM": "not_provided",
+    "immunogenicity": "not_provided",
+    "wt_dissimilarity": 0.1111111111111111,
+    "rank_score": 0.325
+  },
+  "mrna_materials": {
+    "mrna_fasta": "results/R001/mrna_vaccine.fasta",
+    "utr_orf_polyA_design": "results/R001/mrna_design.json",
+    "modification_strategy": "N1-methylpseudouridine"
+  },
+  "target_rationale": "Top peptide-MHC candidate selected by ImmunoGen rank_score; mRNA materials point to the multivalent vaccine design for this run."
+}

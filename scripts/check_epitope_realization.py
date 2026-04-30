@@ -19,20 +19,48 @@ def _source_has_proxy(df: pd.DataFrame, col: str) -> bool:
     return df[col].fillna("").astype(str).str.lower().str.contains("proxy").any()
 
 
+def _pdb_is_real_structure(path: str) -> bool:
+    if not os.path.exists(path):
+        return False
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        text = f.read()
+
+    lower = text.lower()
+    coarse_markers = (
+        "coarse peptide-mhc complex",
+        "coarse ca trace",
+        "replace with alphafold-multimer or pandora for production md",
+    )
+    if any(marker in lower for marker in coarse_markers):
+        return False
+
+    atom_names = []
+    chains = set()
+    for raw in text.splitlines():
+        if raw.startswith(("ATOM", "HETATM")):
+            atom_names.append(raw[12:16].strip())
+            if len(raw) > 21 and raw[21].strip():
+                chains.add(raw[21].strip())
+    atom_count = len(atom_names)
+    if not atom_count:
+        return False
+    ca_ratio = sum(1 for name in atom_names if name == "CA") / atom_count
+    return atom_count >= 1000 and ca_ratio <= 0.4 and len(chains) >= 2
+
+
 def _check_real_structure(run_id: str) -> bool:
     delivery_root = os.path.join("deliveries", run_id, "to_simhub")
     if not os.path.isdir(delivery_root):
         return False
     for case_id in os.listdir(delivery_root):
-        meta_path = os.path.join(delivery_root, case_id, "meta.json")
+        case_dir = os.path.join(delivery_root, case_id)
+        meta_path = os.path.join(case_dir, "meta.json")
+        pdb_path = os.path.join(case_dir, "complex.pdb")
         if not os.path.exists(meta_path):
             continue
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
-        backend = str(meta.get("structure_backend", "")).lower()
-        replaces = bool(meta.get("replaces_coarse"))
-        tool_version = str(meta.get("structure_tool_version", "")).lower()
-        if backend in {"pandora", "afm"} and replaces and tool_version != "na_for_coarse":
+        if meta.get("molecule_type") == "peptide_mhc" and _pdb_is_real_structure(pdb_path):
             return True
     return False
 
