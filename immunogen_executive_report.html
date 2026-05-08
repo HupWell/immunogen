@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ImmunoGen Executive Report</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #171d26;
+      --panel2: #101722;
+      --line: #2a3441;
+      --text: #e6edf3;
+      --muted: #93a4b5;
+      --blue: #3b82f6;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      line-height: 1.55;
+    }
+    .page {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 32px 22px 48px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 26px;
+      margin-bottom: 18px;
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+    h2 {
+      margin: 30px 0 14px;
+      font-size: 20px;
+    }
+    h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: var(--blue);
+    }
+    p { margin: 0; }
+    .sub {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .ok { color: var(--green); border-color: rgba(34, 197, 94, .4); }
+    .info { color: var(--blue); border-color: rgba(59, 130, 246, .4); }
+    .warn { color: var(--yellow); border-color: rgba(234, 179, 8, .45); }
+    .note {
+      margin-top: 18px;
+      padding: 15px 16px;
+      border-left: 4px solid var(--blue);
+      background: rgba(59, 130, 246, .08);
+      border-radius: 0 10px 10px 0;
+      font-size: 15px;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .kpi, .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .kpi { padding: 18px; }
+    .num {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .card-head {
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-body { padding: 15px; }
+    .qa {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .qa-item {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 13px;
+    }
+    .qa-item p { color: var(--muted); font-size: 13px; }
+    .value-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .value-card {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 15px;
+    }
+    .value-card .title {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .value-card .desc {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .flow-step {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 12px;
+      min-height: 156px;
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -9px;
+      top: 18px;
+      color: var(--blue);
+      font-weight: 900;
+      z-index: 2;
+    }
+    .flow-no {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .flow-title {
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .flow-desc {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .cost-chip {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .cost-low { color: var(--green); border-color: rgba(34, 197, 94, .4); }
+    .cost-mid { color: var(--yellow); border-color: rgba(234, 179, 8, .45); }
+    .cost-high { color: var(--red); border-color: rgba(239, 68, 68, .45); }
+    .decision {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .plain-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .plain-list li { margin: 7px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+      font-weight: 700;
+    }
+    tr:nth-child(even) td { background: rgba(255,255,255,.018); }
+    td.right, th.right { text-align: right; font-variant-numeric: tabular-nums; }
+    .bars { display: grid; gap: 12px; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 10px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .bar-label { color: var(--muted); }
+    .track {
+      height: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 4px 0 7px;
+    }
+    .fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+    .fill.green { background: var(--green); }
+    .fill.yellow { background: var(--yellow); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+    @media (max-width: 900px) {
+      .kpis, .grid2 { grid-template-columns: 1fr 1fr; }
+      .qa { grid-template-columns: 1fr; }
+      .value-grid { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr 1fr; }
+      .flow-step:not(:last-child)::after { display: none; }
+      .decision { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .kpis, .grid2 { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .page { padding: 18px 12px 32px; }
+    }
+    @media print {
+      body { background: #fff; color: #111; }
+      .hero, .kpi, .card, table { background: #fff; border-color: #ddd; }
+      :root { --text: #111; --muted: #444; --line: #ddd; --panel2: #f8fafc; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="top">
+        <div>
+          <h1>ImmunoGen 项目阶段成果汇报</h1>
+          <p class="sub">这个项目做的是：把患者突变信息转成个性化 mRNA 疫苗候选方案，并把后续模拟验证需要的结构包准备好。</p>
+        </div>
+        <div>
+          <span class="badge ok">阶段目标已完成</span>
+          <span class="badge info">2026-05-06 口径</span>
+        </div>
+      </div>
+      <div class="note">
+        <strong>一句话结论：</strong>本阶段目标已经完成。项目已经从「只有流程」推进到「有真实工具、有结果、有报告、有交付包」；4 个实例全部完成严格重跑并通过阶段验收。后续可继续扩展为 3–5 条 mRNA 候选方案，再按效果、稳定性与验证成本选择 1–2 条主线。
+      </div>
+      <div class="value-grid">
+        <div class="value-card">
+          <div class="title">做成了什么</div>
+          <div class="desc">完成了从新抗原输入、模型筛选、mRNA 设计、稳定性质控到 SimHub 交付包的完整链路。</div>
+        </div>
+        <div class="value-card">
+          <div class="title">为什么重要</div>
+          <div class="desc">原来需要人工串联的多工具流程，已沉淀成可复跑、可检查、可交付的工程产物。</div>
+        </div>
+        <div class="value-card">
+          <div class="title">当前价值</div>
+          <div class="desc">阶段成果已经可以用于对外技术检查、下游模拟准备和下一阶段候选方案优选。</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><div class="num" style="color:var(--green)">完成</div><div class="label">本阶段核心目标</div></div>
+      <div class="kpi"><div class="num" style="color:var(--green)">4/4</div><div class="label">实例阶段验收通过</div></div>
+      <div class="kpi"><div class="num">246</div><div class="label">候选排序记录</div></div>
+      <div class="kpi"><div class="num" style="color:var(--green)">18</div><div class="label">入选疫苗肽段</div></div>
+    </section>
+
+    <h2>最简单的项目说明</h2>
+    <section class="grid2">
+      <div class="card">
+        <div class="card-head">这个项目到底完成到哪了</div>
+        <div class="card-body">
+          <div class="qa">
+            <div class="qa-item"><h3>是否完成？</h3><p>本阶段已完成。四个实例均跑通并通过阶段验收，已经不是停留在 demo 或流程图阶段。</p></div>
+            <div class="qa-item"><h3>交付了什么？</h3><p>交付了 mRNA 设计结果、模型评分结果、稳定性质控报告、自证材料和 SimHub 输入包。</p></div>
+            <div class="qa-item"><h3>为什么可信？</h3><p>核心后端使用真实工具链，并做了防回退检查；关键交付文件未发现 proxy / fallback / coarse 残留。</p></div>
+            <div class="qa-item"><h3>下一步做什么？</h3><p>在已完成主线基础上，用多模型生成 3–5 条 mRNA 候选，再按成本和效果优选。</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">剩余事项不是主流程未完成 <span class="badge warn">外部依赖</span></div>
+        <div class="card-body">
+          <p><strong>BioDriver：</strong>临床终版 HLA-II 分型到位后，可以基于现有流程直接重跑并更新报告。</p>
+          <p style="margin-top:12px"><strong>SimHub：</strong>MD 轨迹、能量、RMSD、QC flags 回传后，可以完成下游证据归档。</p>
+          <p style="margin-top:12px"><strong>阶段判断：</strong>当前不是项目没完成，而是等待上下游数据把「阶段成果」推进到「临床终版闭环」。</p>
+          <p class="muted" style="margin-top:12px">建议将本阶段作为已完成的关键工程成果进行确认，后续再按新数据进入下一轮。</p>
+        </div>
+      </div>
+    </section>
+
+    <h2>整个流程：从患者数据到 mRNA 候选</h2>
+    <p class="muted" style="margin:0 0 12px">可以把这个项目理解成一条“疫苗候选生产线”：前面负责找靶点，中间负责多模型打分，后面负责生成 mRNA 并把最有希望的候选交给 SimHub 做验证。</p>
+    <section class="flow">
+      <div class="flow-step">
+        <div class="flow-no">STEP 1</div>
+        <div class="flow-title">拿到患者候选数据</div>
+        <div class="flow-desc">输入 BioDriver 提供的新抗原、突变频率 VAF、HLA 分型。简单说：先知道患者身上有哪些“可攻击目标”。</div>
+        <span class="cost-chip cost-low">成本低：数据整理</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 2</div>
+        <div class="flow-title">判断能不能被免疫系统看见</div>
+        <div class="flow-desc">用 NetMHCpan / NetMHCIIpan 看肽段是否容易被 HLA 呈递。简单说：靶点再好，也要先能被免疫系统看见。</div>
+        <span class="cost-chip cost-low">成本低：批量筛</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 3</div>
+        <div class="flow-title">判断是否可能激活免疫反应</div>
+        <div class="flow-desc">用 DeepImmuno、PRIME、Repitope 做免疫原性评分。简单说：从“看得见”里再挑“更可能有效”的。</div>
+        <span class="cost-chip cost-low">成本低：多模型打分</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 4</div>
+        <div class="flow-title">综合排序并选 Top 肽</div>
+        <div class="flow-desc">综合 HLA 结合、免疫原性、VAF、与正常肽差异，选出最值得进入 mRNA 的候选肽。</div>
+        <span class="cost-chip cost-low">成本低：算法收敛</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 5</div>
+        <div class="flow-title">生成 mRNA 设计</div>
+        <div class="flow-desc">用 LinearDesign 做密码子优化，把入选肽段串成可交付的多价 mRNA 序列。</div>
+        <span class="cost-chip cost-mid">成本中：生成方案</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 6</div>
+        <div class="flow-title">检查稳定性与结构</div>
+        <div class="flow-desc">用 RNAfold / RNAeval / RNAplfold 检查 mRNA 稳定性；用 PANDORA + MODELLER 生成 peptide-MHC 结构。</div>
+        <span class="cost-chip cost-mid">成本中：质量把关</span>
+      </div>
+      <div class="flow-step">
+        <div class="flow-no">STEP 7</div>
+        <div class="flow-title">交付 SimHub 验证</div>
+        <div class="flow-desc">把少数最有希望的候选交给 SimHub 做 MD 验证。简单说：昂贵验证只给“筛出来的赢家”。</div>
+        <span class="cost-chip cost-high">成本高：少量验证</span>
+      </div>
+    </section>
+
+    <section class="decision">
+      <div class="card">
+        <div class="card-head">为什么这个流程适合控制成本</div>
+        <div class="card-body">
+          <ul class="plain-list">
+            <li><strong>先便宜后昂贵：</strong>NetMHCpan、DeepImmuno、PRIME 等适合先大批量筛选，尽早淘汰弱候选。</li>
+            <li><strong>多模型互相投票：</strong>多个模型都支持的候选，才更值得进入后续 mRNA 和结构验证。</li>
+            <li><strong>高成本资源只给少数候选：</strong>ColabFold/AFM、SimHub MD 不适合全量跑，应该只给 Top 候选。</li>
+            <li><strong>最终不是拼模型数量：</strong>重点是把模型组合成一个可复跑、可解释、可省钱的决策流程。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">本阶段已经完成的关键价值</div>
+        <div class="card-body">
+          <p><strong>从 0 到 1：</strong>主链路已经打通，不只是写脚本，而是形成了能交付、能复检、能被下游接收的完整产物。</p>
+          <p style="margin-top:12px"><strong>从 demo 到验收：</strong>4 个实例完成真实后端严格重跑，说明流程不是单点跑通，而是具备重复执行能力。</p>
+          <p style="margin-top:12px"><strong>从技术到决策：</strong>已经能支撑“多 mRNA 候选 + 性价比选择”的下一阶段方案。</p>
+        </div>
+      </div>
+    </section>
+
+    <h2>四个实例关键数据</h2>
+    <section class="grid2">
+      <div class="card">
+        <div class="card-head">候选量与入选量</div>
+        <div class="card-body"><div class="bars" id="rank-bars">
+          <div class="bar-row"><div class="bar-label">R001</div><div>
+            <span class="muted">排序 12</span><div class="track"><div class="fill" style="width:6%"></div></div>
+            <span class="muted">入选 2</span><div class="track"><div class="fill green" style="width:20%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R002</div><div>
+            <span class="muted">排序 18</span><div class="track"><div class="fill" style="width:9%"></div></div>
+            <span class="muted">入选 3</span><div class="track"><div class="fill green" style="width:30%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R003</div><div>
+            <span class="muted">排序 18</span><div class="track"><div class="fill" style="width:9%"></div></div>
+            <span class="muted">入选 3</span><div class="track"><div class="fill green" style="width:30%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R_public_001</div><div>
+            <span class="muted">排序 198</span><div class="track"><div class="fill" style="width:100%"></div></div>
+            <span class="muted">入选 10</span><div class="track"><div class="fill green" style="width:100%"></div></div>
+          </div></div>
+        </div></div>
+      </div>
+      <div class="card">
+        <div class="card-head">mRNA 长度与 GC 含量</div>
+        <div class="card-body"><div class="bars" id="mrna-bars">
+          <div class="bar-row"><div class="bar-label">R001</div><div>
+            <span class="muted">长度 193 nt</span><div class="track"><div class="fill" style="width:40%"></div></div>
+            <span class="muted">GC 26.42%</span><div class="track"><div class="fill yellow" style="width:51%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R002</div><div>
+            <span class="muted">长度 229 nt</span><div class="track"><div class="fill" style="width:48%"></div></div>
+            <span class="muted">GC 35.81%</span><div class="track"><div class="fill yellow" style="width:70%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R003</div><div>
+            <span class="muted">长度 229 nt</span><div class="track"><div class="fill" style="width:48%"></div></div>
+            <span class="muted">GC 35.81%</span><div class="track"><div class="fill yellow" style="width:70%"></div></div>
+          </div></div>
+          <div class="bar-row"><div class="bar-label">R_public_001</div><div>
+            <span class="muted">长度 481 nt</span><div class="track"><div class="fill" style="width:100%"></div></div>
+            <span class="muted">GC 51.35%</span><div class="track"><div class="fill yellow" style="width:100%"></div></div>
+          </div></div>
+        </div></div>
+      </div>
+    </section>
+
+    <table style="margin-top:16px">
+      <thead>
+        <tr><th>实例</th><th class="right">排序记录</th><th class="right">入选肽段</th><th class="right">mRNA 长度</th><th class="right">GC%</th><th class="right">MFE</th><th>状态</th></tr>
+      </thead>
+      <tbody id="run-table">
+        <tr><td>R001</td><td class="right">12</td><td class="right">2</td><td class="right">193</td><td class="right">26.42%</td><td class="right">-42.6</td><td>阶段验收通过</td></tr>
+        <tr><td>R002</td><td class="right">18</td><td class="right">3</td><td class="right">229</td><td class="right">35.81%</td><td class="right">-72.6</td><td>阶段验收通过</td></tr>
+        <tr><td>R003</td><td class="right">18</td><td class="right">3</td><td class="right">229</td><td class="right">35.81%</td><td class="right">-72.6</td><td>阶段验收通过</td></tr>
+        <tr><td>R_public_001</td><td class="right">198</td><td class="right">10</td><td class="right">481</td><td class="right">51.35%</td><td class="right">-274.5</td><td>阶段验收通过</td></tr>
+      </tbody>
+    </table>
+
+    <h2>每个阶段使用的模型：谁负责筛选，谁负责验证</h2>
+    <table>
+      <thead><tr><th>阶段</th><th>模型 / 工具</th><th>老板能理解的作用</th><th>成本层级</th><th>状态</th></tr></thead>
+      <tbody id="model-table">
+        <tr><td>候选输入</td><td>BioDriver</td><td>提供患者突变肽、VAF、HLA 分型，相当于项目原材料</td><td><span class="cost-chip cost-low">低：数据接入</span></td><td>已接入</td></tr>
+        <tr><td>MHC-I 结合</td><td>NetMHCpan</td><td>判断肽段是否容易被 I 类 HLA 呈递，是第一道筛选门</td><td><span class="cost-chip cost-low">低：可批量跑</span></td><td>真实后端</td></tr>
+        <tr><td>MHC-I 增强</td><td>BigMHC</td><td>第二路交叉验证，减少只相信一个模型的偏差</td><td><span class="cost-chip cost-mid">中：可选增强</span></td><td>可按预算启用</td></tr>
+        <tr><td>MHC-II 结合</td><td>NetMHCIIpan</td><td>覆盖 CD4 T 细胞相关呈递信号，让候选更全面</td><td><span class="cost-chip cost-low">低：批量筛</span></td><td>待真实 HLA-II 终版</td></tr>
+        <tr><td>免疫原性</td><td>DeepImmuno / PRIME / Repitope</td><td>判断肽段更可能激活免疫反应，相当于多位评审打分</td><td><span class="cost-chip cost-low">低：多模型评分</span></td><td>真实来源口径</td></tr>
+        <tr><td>结构建模</td><td>PANDORA + MODELLER</td><td>生成 peptide-MHC 真实结构，给 SimHub 做下游模拟</td><td><span class="cost-chip cost-mid">中：结构生成</span></td><td>4 个实例完成</td></tr>
+        <tr><td>结构复核</td><td>ColabFold / AFM</td><td>对重点候选再做独立复核，减少结构不靠谱的风险</td><td><span class="cost-chip cost-high">高：只跑重点</span></td><td>建议只给 Top 候选（本轮 AFM：pLDDT约83+、pTM约0.78）</td></tr>
+        <tr><td>mRNA 设计</td><td>LinearDesign</td><td>把筛出来的肽转成 mRNA 序列，是最终候选生成环节</td><td><span class="cost-chip cost-mid">中：方案生成</span></td><td>当前主力</td></tr>
+        <tr><td>mRNA 稳定性</td><td>RNAfold / RNAeval / RNAplfold</td><td>检查 mRNA 二级结构和稳定性，避免方案看起来好但不稳定</td><td><span class="cost-chip cost-low">低：质控检查</span></td><td>4 个实例通过</td></tr>
+        <tr><td>下游验证</td><td>SimHub MD</td><td>用分子动力学看结构稳定性，是更接近真实物理行为的验证</td><td><span class="cost-chip cost-high">高：少量验证</span></td><td>等待回传</td></tr>
+      </tbody>
+    </table>
+
+    <h2>多 mRNA 性价比方案</h2>
+    <p class="muted" style="margin:0 0 12px">推荐后续不是只押一条 mRNA，而是用已有流程批量生成多个候选，再用低成本筛选减少高成本验证投入。</p>
+    <table>
+      <thead><tr><th>方案</th><th>生成方式</th><th>成本</th><th>适用场景</th><th>推荐理由</th></tr></thead>
+      <tbody id="strategy-table">
+        <tr><td>A 稳妥版</td><td>沿用现有 Top 肽 + LinearDesign</td><td>最低</td><td>最快形成交付，适合当前验收版</td><td>已有结果支撑，是本阶段完成度最高的基线方案</td></tr>
+        <tr><td>B 免疫优先版</td><td>提高 DeepImmuno / PRIME / Repitope 权重</td><td>低-中</td><td>更重视免疫反应</td><td>适合在预算不大幅增加的情况下提高候选命中可能性</td></tr>
+        <tr><td>C 结构优先版</td><td>PANDORA 通过后用 ColabFold/AFM 复核</td><td>中-高</td><td>减少结构不稳定候选</td><td>适合进入 SimHub 前做严格把关，避免高成本验证浪费</td></tr>
+        <tr><td>D 稳定性优先版</td><td>同一肽组合生成多条 mRNA 后按 RNAfold/RNAplfold 选优</td><td>中</td><td>提高表达与稳定性把握</td><td>适合最终收敛前优选 mRNA 序列版本</td></tr>
+        <tr><td>E 成本优先版</td><td>只保留多模型一致高分候选，减少 SimHub 数量</td><td>最低</td><td>预算受限场景</td><td>适合用最少验证次数保留最大确定性</td></tr>
+      </tbody>
+    </table>
+
+    <div class="footer">
+      口径说明：本报告根据 README、docs/TODO.md、4 个 results/REPORT.md 与 qc_metrics.json 汇总；用于阶段筛选和下游模拟准备，不等同于临床结论。
+    </div>
+  </main>
+
+</body>
+</html>

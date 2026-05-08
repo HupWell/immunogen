@@ -2,7 +2,7 @@
 
 > 负责人：梁心恬  
 > 文档目的：只保留当前有效状态、剩余阻塞和下一步动作。  
-> 最近一次核对：2026-04-30  
+> 最近一次核对：2026-05-06  
 > 当前结论：`R001/R002/R003/R_public_001` 已完成阶段版严格重跑；机器可读结果未发现 `proxy` / `fallback` / `coarse` 残留。
 
 ---
@@ -27,6 +27,12 @@
 - [x] `R_public_001`
 
 注意：`R002/R003/R_public_001` 的 HLA-II 仍是公开队列演示分型，不是 BioDriver 患者临床终版分型。
+
+### 对外 / 管理层汇报材料（补充）
+
+- [x] `immunogen_executive_report.html`（仓库根目录）：单页可视化汇报（流程 7 步、模型与成本分层、四实例关键指标；正文为静态 HTML，Jupyter / 浏览器可直接打开，不依赖脚本渲染）
+- [x] `docs/ImmunoGen_管理层汇报_老板版.md`：可转 PDF / Word 的纯文本汇报稿
+- [x] `canvases/immunogen-executive-report.canvas.tsx`：项目内 Cursor Canvas 源码副本（IDE 内 Canvas 预览请以 Cursor 托管路径为准：`.cursor/projects/root-autodl-tmp/canvases/immunogen-executive-report.canvas.tsx`）
 
 ---
 
@@ -123,8 +129,25 @@
 - [ ] Saluki / RNAsnp 后续可作为额外稳定性工具接入；当前 ViennaRNA 增强口径已满足本机真实稳定性验收
 - [ ] BigMHC 可作为额外 MHC-I 交叉验证增强；当前 NetMHCpan `real_tsv` 已满足必需真实交叉验证
 - [ ] 整理 Git 工作区中的本机噪声和外部工具目录，避免误提交 `.autodl/`、`external_refs/`、下载缓存等
+- [ ] （可选）`immunogen_executive_report.html` 内嵌指标表目前与 `results/*/REPORT.md`、`qc_metrics.json` 手工对齐；四实例全量重跑后记得同步更新 HTML，或后续用脚本自动生成一页式汇报
 
----
+### 5) 多 mRNA 候选（管理层 / 性价比筛选）
+
+- [x] `scripts/build_multivalent_mrna.py` 支持 `--mrna_output_suffix`：同一 `run_id` 可生成多条候选而不覆盖，例如 `mrna_vaccine_ld_real.fasta` + `mrna_design_ld_real.json`
+- [x] `scripts/run_all.py` 支持透传 `--mrna_output_suffix`（全流程构建步骤会使用该后缀）
+- [x] `scripts/compare_mrna_candidates.py`：扫描 `mrna_design*.json`，生成 `mrna_candidate_comparison.md` 供选型会议使用
+- [x] `scripts/run_qc_for_candidates.py`：对每条候选逐条运行 `run_qc_and_report.py`，并归档到 `results/<run_id>/mrna_candidate_qc/<candidate>/`，同时生成 `qc_summary.md`
+- [ ] **用法提示**：默认无后缀时仍为 `mrna_vaccine.fasta`，与 `prepare_simhub_delivery.py` 的固定路径一致。若已用批量 QC 选出候选，进入 SimHub 前仍需将该候选同步为默认文件名（或后续扩展 SimHub 脚本支持候选路径参数）。
+
+典型生成多条（示例，在已有 `selected_peptides.csv` 前提下）：
+
+```bash
+python scripts/build_multivalent_mrna.py --run_id R001 --codon_mode optimized --mrna_output_suffix v_opt
+python scripts/build_multivalent_mrna.py --run_id R001 --codon_mode real_cmd \
+  --codon_real_tool LinearDesign --codon_real_cmd '...' --mrna_output_suffix v_ld_real
+python scripts/compare_mrna_candidates.py --run_id R001
+python scripts/run_qc_for_candidates.py --run_id R001
+```
 
 ## 四、下一步优先级
 
@@ -135,7 +158,13 @@
    数据到位后做全量重跑和临床终版自证。
 
 3. **可选：提升 AFM 复核质量**  
-   当前 AFM 已跑通但置信度低；如需替换结构，建议增加 MSA、recycle、model/seed 后重新筛选。
+   当前 AFM 置信度已显著提升：已使用 `msa-mode=mmseqs2_uniref`、`recycle=3`、`num-models=2`、`num-seeds=3` 完成复核。复核记录见 `docs/P3_4_AFM_REVIEW_R_PUBLIC_001_REFINED_2026-05-06.md`。本轮仍建议作为更强二级证据归档，若要替换生产交付结构需进一步做严格结构对比确认。
+
+4. **对外汇报页与结果一致**  
+   若有新的严格重跑或指标变更，同步更新 `immunogen_executive_report.html`（及按需更新 `docs/ImmunoGen_管理层汇报_老板版.md`）。
+
+5. **管理层：多条 mRNA 候选**  
+   使用 `build_multivalent_mrna.py --mrna_output_suffix ...` 在同一 run 下保留多条 FASTA；选定主线后再用默认文件名跑 QC / SimHub（见 `docs/TODO.md` 第五节）。
 
 ---
 

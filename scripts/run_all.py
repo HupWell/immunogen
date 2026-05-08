@@ -120,6 +120,7 @@ def main(
     require_real_immunogenicity_repitope: bool,
     allow_proxy_scores: bool,
     target: str,
+    mrna_output_suffix: str,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -209,6 +210,8 @@ def main(
         "--tm_domain_aa",
         tm_domain_aa,
     ]
+    if (mrna_output_suffix or "").strip():
+        step5.extend(["--mrna_output_suffix", mrna_output_suffix.strip()])
     step6 = [
         python_exe,
         os.path.join(scripts_dir, "run_qc_and_report.py"),
@@ -408,6 +411,14 @@ if __name__ == "__main__":
         choices=["full", "mhc_ranking", "report", "simhub", "feasibility"],
         help="执行范围：full=全流程；mhc_ranking=到表位排名；report=仅报告/自证；simhub=仅交付封装；feasibility=仅可行性。",
     )
+    parser.add_argument(
+        "--mrna_output_suffix",
+        default="",
+        help=(
+            "传给 build_multivalent_mrna：可选输出后缀，同一 run 生成 mrna_vaccine_<后缀>.fasta 等多条候选；"
+            "留空则保持默认 mrna_vaccine.fasta（与 QC/SimHub 一致）。"
+        ),
+    )
     args = parser.parse_args()
 
     main(
@@ -447,4 +458,5 @@ if __name__ == "__main__":
         require_real_immunogenicity_repitope=args.require_real_immunogenicity_repitope,
         allow_proxy_scores=args.allow_proxy_scores,
         target=args.target,
+        mrna_output_suffix=args.mrna_output_suffix,
     )

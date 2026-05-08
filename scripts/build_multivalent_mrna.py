@@ -2,7 +2,8 @@
 """
 功能：将入选肽段串联并生成多价 mRNA 序列。
 输入：results/<run_id>/selected_peptides.csv
-输出：results/<run_id>/mrna_vaccine.fasta, results/<run_id>/mrna_design.json
+输出：默认 results/<run_id>/mrna_vaccine.fasta 与 mrna_design.json；
+     若指定 --mrna_output_suffix，则为 mrna_vaccine_<suffix>.fasta 与 mrna_design_<suffix>.json（便于同一 run 保留多条候选）。
 """
 import os
 import json
@@ -12,8 +13,36 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
+
+
+def _sanitize_mrna_output_suffix(raw: str) -> str:
+    """清洗输出后缀，仅保留字母数字、下划线、短横线，避免路径注入。"""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    cleaned = "".join(ch for ch in s if ch.isalnum() or ch in ("_", "-"))
+    if not cleaned:
+        raise ValueError(f"mrna_output_suffix 无效（清洗后为空）: {raw!r}")
+    if len(cleaned) > 48:
+        cleaned = cleaned[:48]
+    return cleaned
+
+
+def _resolve_mrna_output_paths(out_dir: str, output_suffix: str) -> Tuple[str, str]:
+    """根据后缀解析 FASTA 与 design JSON 路径；后缀为空时保持历史默认文件名。"""
+    suffix = _sanitize_mrna_output_suffix(output_suffix)
+    if not suffix:
+        return (
+            os.path.join(out_dir, "mrna_vaccine.fasta"),
+            os.path.join(out_dir, "mrna_design.json"),
+        )
+    return (
+        os.path.join(out_dir, f"mrna_vaccine_{suffix}.fasta"),
+        os.path.join(out_dir, f"mrna_design_{suffix}.json"),
+    )
 
 SIGNAL_PEPTIDE_PRESETS = {
     # 常用分泌信号肽示例（教学/流程用途）
@@ -364,6 +393,7 @@ def main(
     signal_peptide_aa: str,
     tm_domain_preset: str,
     tm_domain_aa: str,
+    mrna_output_suffix: str = "",
 ):
     """
     主流程：
@@ -375,8 +405,7 @@ def main(
     """
     in_file = os.path.join("results", run_id, "selected_peptides.csv")
     out_dir = os.path.join("results", run_id)
-    fasta_file = os.path.join(out_dir, "mrna_vaccine.fasta")
-    design_file = os.path.join(out_dir, "mrna_design.json")
+    fasta_file, design_file = _resolve_mrna_output_paths(out_dir, mrna_output_suffix)
 
     if not os.path.exists(in_file):
         raise FileNotFoundError(f"未找到输入文件: {in_file}")
@@ -480,6 +509,7 @@ def main(
             "gc_percent": round(gc_content(full_seq), 2),
         },
         "modification_strategy": "N1-methylpseudouridine（文档说明，未在序列字母中直接编码）",
+        "mrna_output_suffix": _sanitize_mrna_output_suffix(mrna_output_suffix),
         "output_files": {
             "fasta": fasta_file,
             "design_json": design_file,
@@ -551,6 +581,15 @@ if __name__ == "__main__":
         default="",
         help="C端TM手工氨基酸序列（与 preset 二选一）",
     )
+    parser.add_argument(
+        "--mrna_output_suffix",
+        default="",
+        help=(
+            "可选：输出文件名后缀，用于同一 run 生成多条 mRNA 候选而不覆盖。"
+            "例如 v_ld_real、v_opt；生成 mrna_vaccine_<后缀>.fasta 与 mrna_design_<后缀>.json；"
+            "留空则仍为 mrna_vaccine.fasta / mrna_design.json（与下游 QC、SimHub 默认一致）。"
+        ),
+    )
     args = parser.parse_args()
     main(
         args.run_id,
@@ -565,4 +604,5 @@ if __name__ == "__main__":
         args.signal_peptide_aa,
         args.tm_domain_preset,
         args.tm_domain_aa,
+        args.mrna_output_suffix,
     )
