@@ -302,11 +302,11 @@
         </div>
         <div>
           <span class="badge ok">阶段目标已完成</span>
-          <span class="badge info">2026-05-06 口径</span>
+          <span class="badge info">2026-05-11 与 results 同步</span>
         </div>
       </div>
       <div class="note">
-        <strong>一句话结论：</strong>本阶段目标已经完成。项目已经从「只有流程」推进到「有真实工具、有结果、有报告、有交付包」；4 个实例全部完成严格重跑并通过阶段验收。后续可继续扩展为 3–5 条 mRNA 候选方案，再按效果、稳定性与验证成本选择 1–2 条主线。
+        <strong>一句话结论：</strong>本阶段目标已经完成。项目已经从「只有流程」推进到「有真实工具、有结果、有报告、有交付包」；4 个实例全部完成严格重跑并通过阶段验收（核心产物生成时间以各 run 的 <code>REPORT.md</code> 为准，当前仓库多为 <strong>2026-05-06</strong> 批次）。<strong>R_public_001</strong> 已批量生成多条 mRNA，并完成逐条质控汇总（<code>qc_summary.md</code> 共 <strong>11</strong> 行：含 default、internal 系与 <code>v_basic</code>/<code>v_opt</code> 别名项）；主线交付仍以 <code>default</code>（LinearDesign <code>real_cmd</code>）为准，再结合稳定性与成本从候选池收敛到 1–2 条推进。
       </div>
       <div class="value-grid">
         <div class="value-card">
@@ -340,7 +340,7 @@
             <div class="qa-item"><h3>是否完成？</h3><p>本阶段已完成。四个实例均跑通并通过阶段验收，已经不是停留在 demo 或流程图阶段。</p></div>
             <div class="qa-item"><h3>交付了什么？</h3><p>交付了 mRNA 设计结果、模型评分结果、稳定性质控报告、自证材料和 SimHub 输入包。</p></div>
             <div class="qa-item"><h3>为什么可信？</h3><p>核心后端使用真实工具链，并做了防回退检查；关键交付文件未发现 proxy / fallback / coarse 残留。</p></div>
-            <div class="qa-item"><h3>下一步做什么？</h3><p>在已完成主线基础上，用多模型生成 3–5 条 mRNA 候选，再按成本和效果优选。</p></div>
+            <div class="qa-item"><h3>下一步做什么？</h3><p><strong>R_public_001</strong> 已对 11 条 mRNA 跑完批量 QC（见下文节选表与仓库内 qc_summary）；其他实例可按同样方式扩展。选定主线后，将选中序列同步为默认文件名再交 SimHub。</p></div>
           </div>
         </div>
       </div>
@@ -482,6 +482,23 @@
       </tbody>
     </table>
 
+    <h2>R_public_001：多条 mRNA 候选（与 results 实测一致）</h2>
+    <p class="muted" style="margin:0 0 12px">下表<strong>节选</strong>几条最有代表性的候选，方便老板理解与拍板。<strong>完整 11 条</strong>（含每条报告路径）以仓库内 <code>results/R_public_001/mrna_candidate_qc/qc_summary.md</code> 为准。表中「主线」一行与交付用 <code>mrna_design.json</code> / <code>mrna_vaccine.fasta</code> 一致；其他行为同批次肽组合下的备选序列版本。</p>
+    <table>
+      <thead>
+        <tr><th>角色</th><th>候选名</th><th class="right">长度(nt)</th><th class="right">GC%</th><th class="right">RNAfold MFE</th><th>工具 / 备注（白话）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>主线（交付基线）</strong></td><td>default</td><td class="right">481</td><td class="right">51.35%</td><td class="right">-274.5</td><td>LinearDesign 真实密码子优化；本章「四实例」表里本行数据与此一致，稳定性在当前池子里最好。</td></tr>
+        <tr><td>内部优化（低成本备选）</td><td>o0（同 v_opt）</td><td class="right">481</td><td class="right">45.53%</td><td class="right">-142.8</td><td>流程内置 optimized，不配外置 LinearDesign；更省环境与维护成本，稳定性弱于主线。</td></tr>
+        <tr><td>内部 + 信号肽</td><td>o_sig</td><td class="right">541</td><td class="right">47.69%</td><td class="right">-173.1</td><td>肽组合不变，加 N 端信号肽预设，序列更长，偏「将来要做膜相关/分泌路径」的工程试探。</td></tr>
+        <tr><td>内部 + TM</td><td>o_tm</td><td class="right">520</td><td class="right">46.54%</td><td class="right">-156.4</td><td>加 C 端跨膜预设，长度介于 o0 与 o_sig_tm 之间，用于对比工程方案，不代表已选定实验路线。</td></tr>
+        <tr><td>内部全长工程版</td><td>o_sig_tm</td><td class="right">580</td><td class="right">48.45%</td><td class="right">-185.2</td><td>信号肽 + TM 同时具备；在同为 internal 的路线里 MFE 相对更优，仍明显弱于主线 default，适合作为「备选长读长版本」上会讨论。</td></tr>
+        <tr><td>basic 对照</td><td>b0（同 v_basic）</td><td class="right">481</td><td class="right">32.64%</td><td class="right">-66.4</td><td>最简单编码方式，跑得最快；稳定性明显偏弱，一般不单独作为首推，多用于对照和理解差异。</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin:8px 0 0">另：批量清单中还有 <code>b_sig</code> / <code>b_tm</code> / <code>b_sig_tm</code> 等 basic 系变体及 <code>v_basic</code>/<code>v_opt</code> 与 <code>b0</code>/<code>o0</code> 的对应关系，选型会议请直接打开 qc_summary 全表。<strong>数据口径：</strong>当前仓库中 <code>results/R_public_001/qc_metrics.json</code> 与 <code>results/R_public_001/REPORT.md</code>「运行概况」仍为 <strong>45.53% / -142.8</strong>（与 internal <code>optimized</code> 候选一致），与交付主线 <code>mrna_design.json</code>（<strong>51.35% / -274.5</strong>）不一致；<strong>本页「四实例汇总表」与 default 节选行以 <code>mrna_design.json</code> 与 <code>mrna_candidate_qc/default/</code> 为准。</strong></p>
+
     <h2>每个阶段使用的模型：谁负责筛选，谁负责验证</h2>
     <table>
       <thead><tr><th>阶段</th><th>模型 / 工具</th><th>老板能理解的作用</th><th>成本层级</th><th>状态</th></tr></thead>
@@ -513,7 +530,7 @@
     </table>
 
     <div class="footer">
-      口径说明：本报告根据 README、docs/TODO.md、4 个 results/REPORT.md 与 qc_metrics.json 汇总；用于阶段筛选和下游模拟准备，不等同于临床结论。
+      口径说明：四实例汇总行以各 run 交付用 <code>mrna_design.json</code> 及主线 <code>qc_metrics.json</code> / <code>REPORT.md</code> 交叉核对为准；其中 <strong>R_public_001</strong> 若根目录 JSON/报告「运行概况」与 <code>mrna_design.json</code> 冲突，视为<strong>最后一次独立 QC 未写回主线</strong>，以 <code>mrna_design.json</code> + <code>mrna_candidate_qc/default/</code> 为准。多条 mRNA 完整清单：<code>results/R_public_001/mrna_candidate_qc/qc_summary.md</code>。本页于 <strong>2026-05-11</strong> 与上述路径再次对齐后刷新，仅供阶段汇报与候选收敛讨论，不等同于临床结论。
     </div>
   </main>
 

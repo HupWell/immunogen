@@ -5,8 +5,10 @@
 
 说明：
 - 只接受真实 PANDORA 模板数据库，不生成 coarse/占位结构。
-- 默认读取 results/<run_id>/selected_peptides.csv 的 Top1 peptide/HLA。
-- 输出 PDB 可继续交给 prepare_simhub_delivery.py --structure_backend pandora。
+- 默认读取 results/<run_id>/selected_peptides.csv；`--top_k` 时对前 K 条逐条建模。
+- `--top_k 1` 时 PDB 仍为 `results/structure_models/pandora/<run>/<case_id>/complex.pdb`（兼容旧路径）。
+- `--top_k>1` 时输出 `.../<case_id>/rank_02/complex.pdb` 等子目录，`rank_01` 与单列输出路径一致语义（见下文）。
+- 输出 PDB 可交给 prepare_simhub_delivery.py --structure_backend pandora（多 case 自动按 rank 目录解析）。
 """
 import argparse
 import json
@@ -28,14 +30,17 @@ def _load_case_id(run_id: str) -> str:
     return case_id or run_id
 
 
-def _load_top_target(run_id: str) -> Dict[str, str]:
+def _selected_row(run_id: str, row_index: int) -> Dict[str, str]:
+    """读取 selected_peptides 指定行。"""
     selected_path = Path("results") / run_id / "selected_peptides.csv"
     if not selected_path.exists():
         raise FileNotFoundError(f"未找到入选肽文件: {selected_path}")
     df = pd.read_csv(selected_path)
     if df.empty:
         raise ValueError(f"{selected_path} 为空，无法运行 PANDORA。")
-    row = df.iloc[0]
+    if row_index < 0 or row_index >= len(df):
+        raise IndexError(f"selected_peptides 只有 {len(df)} 行，请求的 row_index={row_index}")
+    row = df.iloc[row_index]
     peptide = str(row.get("mut_peptide", "")).strip().upper()
     allele = str(row.get("hla_allele", "")).strip()
     if not peptide:
@@ -163,26 +168,22 @@ def _find_model_pdb(output_dir: Path, target_id: str) -> Path:
     return max(candidates, key=lambda p: p.stat().st_size)
 
 
-def main(
+def _run_one_pandora_job(
     run_id: str,
-    database_path: str,
-    pdb_root: str,
-    output_root: str,
+    case_id: str,
+    rank_index_1based: int,
+    peptide: str,
+    allele: str,
+    out_dir: Path,
+    database_path: Path,
+    pdb_root: Path,
     n_loop_models: int,
     n_jobs: Optional[int],
 ) -> None:
+    """在指定 out_dir 下生成 complex.pdb 与 pandora_structure_meta.json。"""
     from PANDORA.PMHC import PMHC
     from PANDORA.Pandora.Pandora import Pandora
 
-    # PANDORA 0.9 调用 MUSCLE 旧版 -in/-out 参数；项目内包装器会转成 MUSCLE 5 的真实参数。
-    wrapper_dir = Path("tools") / "pandora_bin"
-    if wrapper_dir.exists():
-        os.environ["PATH"] = f"{wrapper_dir.resolve()}{os.pathsep}{os.environ.get('PATH', '')}"
-
-    case_id = _load_case_id(run_id)
-    top = _load_top_target(run_id)
-    target_id = f"{run_id}_{case_id}_top1"
-    out_dir = (Path(output_root) / run_id / case_id).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         import PANDORA
@@ -191,12 +192,13 @@ def main(
     except Exception:
         pass
 
-    db = _load_database(Path(database_path), Path(pdb_root))
-    mhc_sequence = _match_mhci_sequence(db, top["allele"])
+    target_id = f"{run_id}_{case_id}_rank{rank_index_1based}"
+    db = _load_database(database_path, pdb_root)
+    mhc_sequence = _match_mhci_sequence(db, allele)
     target = PMHC.Target(
         target_id,
-        allele_type=[top["allele"]],
-        peptide=top["peptide"],
+        allele_type=[allele],
+        peptide=peptide,
         MHC_class="I",
         M_chain_seq=mhc_sequence,
         anchors=[],
@@ -226,11 +228,12 @@ def main(
     meta = {
         "run_id": run_id,
         "case_id": case_id,
-        "peptide": top["peptide"],
-        "hla_allele": top["allele"],
+        "rank_index_1based": rank_index_1based,
+        "peptide": peptide,
+        "hla_allele": allele,
         "backend": "pandora",
-        "database_path": str(Path(database_path).resolve()),
-        "pdb_root": str(Path(pdb_root).resolve()),
+        "database_path": str(database_path.resolve()),
+        "pdb_root": str(pdb_root.resolve()),
         "n_loop_models": n_loop_models,
         "template": getattr(runner.template, "id", ""),
         "template_pdb": str(original_template_pdb),
@@ -240,7 +243,53 @@ def main(
     }
     with (out_dir / "pandora_structure_meta.json").open("w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
-    print(f"完成真实 PANDORA 结构: {final_pdb}")
+    print(f"完成真实 PANDORA 结构 (rank {rank_index_1based}): {final_pdb}")
+
+
+def main(
+    run_id: str,
+    database_path: str,
+    pdb_root: str,
+    output_root: str,
+    n_loop_models: int,
+    n_jobs: Optional[int],
+    top_k: int,
+) -> None:
+    # PANDORA 0.9 调用 MUSCLE 旧版 -in/-out 参数；项目内包装器会转成 MUSCLE 5 的真实参数。
+    wrapper_dir = Path("tools") / "pandora_bin"
+    if wrapper_dir.exists():
+        os.environ["PATH"] = f"{wrapper_dir.resolve()}{os.pathsep}{os.environ.get('PATH', '')}"
+
+    case_id = _load_case_id(run_id)
+    tp = Path("results") / run_id / "selected_peptides.csv"
+    df = pd.read_csv(tp)
+    k = max(1, min(int(top_k), len(df)))
+
+    dbp = Path(database_path)
+    pdb_r = Path(pdb_root)
+
+    for i in range(k):
+        top = _selected_row(run_id, i)
+        # top_k==1：保持旧目录 results/structure_models/pandora/run/case/（无 rank 子目录）
+        # top_k>1：每条落在 rank_XX/complex.pdb，与 prepare_simhub_delivery 多 MD case 对齐
+        if top_k <= 1:
+            out_dir = (Path(output_root) / run_id / case_id).resolve()
+            rank_disp = 1
+        else:
+            out_dir = (Path(output_root) / run_id / case_id / f"rank_{i + 1:02d}").resolve()
+            rank_disp = i + 1
+        _run_one_pandora_job(
+            run_id=run_id,
+            case_id=case_id,
+            rank_index_1based=rank_disp,
+            peptide=top["peptide"],
+            allele=top["allele"],
+            out_dir=out_dir,
+            database_path=dbp,
+            pdb_root=pdb_r,
+            n_loop_models=n_loop_models,
+            n_jobs=n_jobs,
+        )
 
 
 if __name__ == "__main__":
@@ -263,6 +312,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_loop_models", type=int, default=5, help="MODELLER loop 模型数，默认 5。")
     parser.add_argument("--n_jobs", type=int, default=None, help="MODELLER 并行任务数，默认由 PANDORA 决定。")
+    parser.add_argument(
+        "--top_k",
+        type=int,
+        default=1,
+        help="对接 SimHub Top K 条肽-MHC 结构；默认 1 与旧路径兼容，建议 3–5。",
+    )
     args = parser.parse_args()
     main(
         run_id=args.run_id,
@@ -271,4 +326,5 @@ if __name__ == "__main__":
         output_root=args.output_root,
         n_loop_models=args.n_loop_models,
         n_jobs=args.n_jobs,
+        top_k=args.top_k,
     )

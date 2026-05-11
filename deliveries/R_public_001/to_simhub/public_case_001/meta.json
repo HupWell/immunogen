@@ -7,12 +7,12 @@
   "stage_versions": {
     "immunogen": "v0.1.0"
   },
-  "timestamp": "2026-04-30T09:32:09+08:00",
+  "timestamp": "2026-05-11T11:04:32+08:00",
   "molecule_type": "peptide_mhc",
   "target_name": "HLA-C*01:02 peptide-MHC complex",
   "target_uniprot": "P04222",
   "target_evidence_level": "medium",
-  "upstream_score": 0.3357736729782401,
+  "upstream_score": 0.4583333333333333,
   "priority": "medium",
   "notes": [
     "Input package follows SimHub peptide_mhc contract.",

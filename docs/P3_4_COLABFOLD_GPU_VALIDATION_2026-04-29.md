@@ -7,7 +7,7 @@
 - AlphaFold-multimer v3 参数已在 `external_refs/colabfold_data` 缓存中可用。
 - AFM 已产出 PDB、PAE、pLDDT 和 score JSON。
 - 本轮 AFM 置信度较低：mean pLDDT `31.79`，pTM `0.18`，ipTM `0.11`；因此不建议替换当前 PANDORA 交付结构。
-- 详细复核记录见：`docs/P3_4_AFM_REVIEW_R_PUBLIC_001_2026-04-30.md`。
+- 复核与参数升级后的有效记录见：`docs/P3_4_AFM_REVIEW_R_PUBLIC_001_REFINED_2026-05-06.md`；首轮 GPU 低置信度轮次存档见：`docs/P3_4_AFM_REVIEW_R_PUBLIC_001_2026-04-30.md`。
 
 ## GPU / JAX 验证
 

@@ -1,18 +1,18 @@
 {
-  "candidate_id": "R_public_001:public_case_001:AAAAVIPTV",
+  "candidate_id": "R_public_001:public_case_001:HMTEVVRHC",
   "therapy_line": "mRNA_vaccine",
   "peptide": {
-    "mut_peptide": "AAAAVIPTV",
-    "wt_peptide": "AAAAVIPTA",
+    "mut_peptide": "HMTEVVRHC",
+    "wt_peptide": "HMTEVVRRC",
     "hla_allele": "HLA-C*01:02",
-    "mutation": "3",
-    "variant_vaf": 0.2
+    "mutation": "TP53_R175H",
+    "variant_vaf": 0.25
   },
   "scores": {
     "affinity_nM": "not_provided",
     "immunogenicity": "not_provided",
     "wt_dissimilarity": 0.1111111111111111,
-    "rank_score": 0.3357736729782401
+    "rank_score": 0.4583333333333333
   },
   "mrna_materials": {
     "mrna_fasta": "results/R_public_001/mrna_vaccine.fasta",

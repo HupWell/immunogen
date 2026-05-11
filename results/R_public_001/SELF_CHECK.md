@@ -23,10 +23,10 @@
 ## 3. 本轮 RNA 折叠状态
 
 - `rnafold_status`：**ok**
-- `rnafold_mfe`（若已计算）：**-274.5**
+- `rnafold_mfe`（若已计算）：**-281.7**
 - `mrna_stability_status`：**ok**
-- `RNAplfold mean_unpaired_l1`：**0.438802**
-- `RNAplfold mean_unpaired_l10`：**0.241025**
+- `RNAplfold mean_unpaired_l1`：**0.465595**
+- `RNAplfold mean_unpaired_l10`：**0.242163**
 
 ## 4. 已知局限（须在汇报中声明）
 

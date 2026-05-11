@@ -12,9 +12,14 @@ conda-meta/
 venv/
 env/
 
+# 平台 / 本地监控（勿提交）
+.autodl/
+
 # IDE
 .vscode/
 .idea/
+.ipynb_checkpoints/
+
 
 # OS
 .DS_Store

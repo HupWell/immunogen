@@ -126,12 +126,13 @@ def pick_target_alpha_allele(hla_json: dict, run_id: str = ""):
                     case_id = json.load(f).get("case_id") or run_id
             except Exception:
                 case_id = run_id
-        candidate_files.extend(
-            [
-                os.path.join("deliveries", run_id, "to_simhub", case_id, "selected_for_md.csv"),
-                os.path.join("results", run_id, "selected_peptides.csv"),
-            ]
-        )
+        simhub_root = os.path.join("deliveries", run_id, "to_simhub")
+        if os.path.isdir(simhub_root):
+            for name in sorted(os.listdir(simhub_root)):
+                p = os.path.join(simhub_root, name, "selected_for_md.csv")
+                if os.path.isfile(p):
+                    candidate_files.append(p)
+        candidate_files.append(os.path.join("results", run_id, "selected_peptides.csv"))
     for path in candidate_files:
         if not os.path.exists(path):
             continue

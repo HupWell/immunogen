@@ -51,7 +51,7 @@ def write_positive_control(run_id: str, out_dir: str, selected: pd.DataFrame):
 ## 3. 如何人工复核
 
 1. 打开 `selected_peptides.csv`，搜索 `VVGADGVGK`。
-2. 若未命中，可检查 `neoantigen_candidates.csv` 是否包含该突变肽，或增大 `--top_n` 后重跑 `run_all.py`。
+2. 若未命中：检查 `neoantigen_candidates.csv` 是否包含该突变肽；或增大 `--top_n` 后重跑 `run_all.py`；或对 `select_top_peptides.py` / `run_all.py` 使用 `--ensure_positive_control_peptides VVGADGVGK`（在过滤后候选池中则用其替换选中集「排名分」最低的一条，仍保持 Top-N 条数不变）。
 
 ## 4. 说明
 

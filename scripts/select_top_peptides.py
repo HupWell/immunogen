@@ -25,7 +25,57 @@ def hamming_dissimilarity(mut_peptide: str, wt_peptide: str) -> float:
     return diff_count / len(mut_peptide)
 
 
-def main(run_id: str, top_n: int, min_dissimilarity: float):
+def _apply_positive_control_pins(
+    selected: pd.DataFrame,
+    filtered: pd.DataFrame,
+    peptides_csv: str,
+) -> pd.DataFrame:
+    """
+    对逗号分隔的 mut_peptide 序列做「阳性对照保入」：
+    若在 filtered 池中但不在当前 Top-N 中，则用该肽替换选中集合里 rank_score 最低的一条（保持条数仍为 top_n）。
+    """
+    peptides = [p.strip().upper() for p in (peptides_csv or "").split(",") if p.strip()]
+    if not peptides:
+        return selected
+
+    cols = list(selected.columns)
+    # 转成「行列表」，便于原位替换且不破坏长度
+    rows = selected.copy().reset_index(drop=True).to_dict(orient="records")
+    fmp = filtered["mut_peptide"].astype(str).str.upper()
+
+    for pep in peptides:
+        present = any(str(r.get("mut_peptide", "")).strip().upper() == pep for r in rows)
+        if present:
+            continue
+        match = filtered[fmp == pep]
+        if match.empty:
+            print(f"[positive_control] 跳过 {pep}：不在过滤后的 ranking 池中（可能被 min_dissimilarity 等排除）。")
+            continue
+        pin_ser = match.iloc[0]
+        if not rows:
+            break
+
+        def _rank_key(rec: dict) -> float:
+            v = pd.to_numeric(rec.get("rank_score"), errors="coerce")
+            if pd.isna(v):
+                return float("-inf")
+            return float(v)
+
+        worst_i = min(range(len(rows)), key=lambda i: _rank_key(rows[i]))
+        base = rows[worst_i].copy()
+        for col in cols:
+            if col in pin_ser.index:
+                base[col] = pin_ser[col]
+        rows[worst_i] = base
+        print(f"[positive_control] 已将 rank_score 最低条目替换为 mut_peptide={pep}。")
+
+    out = pd.DataFrame(rows)
+    if not out.empty and "rank_score" in out.columns:
+        out = out.sort_values("rank_score", ascending=False, na_position="last").reset_index(drop=True)
+    return out
+
+
+def main(run_id: str, top_n: int, min_dissimilarity: float, ensure_positive_control_peptides: str):
     """
     主流程：
     1) 读取 peptide_mhc_ranking.csv；
@@ -64,6 +114,7 @@ def main(run_id: str, top_n: int, min_dissimilarity: float):
     # 过滤与 WT 过于相似的候选肽
     filtered = grouped[grouped["dissimilarity"] >= min_dissimilarity].copy()
     selected = filtered.head(top_n).copy()
+    selected = _apply_positive_control_pins(selected, filtered, ensure_positive_control_peptides)
 
     # 输出列顺序尽量清晰，便于后续 ORF 构建使用
     output_columns = [
@@ -94,5 +145,18 @@ if __name__ == "__main__":
         default=0.1,
         help="与 WT 最小差异比例阈值，默认 0.1",
     )
+    parser.add_argument(
+        "--ensure_positive_control_peptides",
+        default="",
+        help=(
+            "逗号分隔的 mut_peptide（序列）；若在过滤池中但未进 Top-N，"
+            "则替换选中集合 rank_score 最低的一条。用于任务书 Positive Control。"
+        ),
+    )
     args = parser.parse_args()
-    main(args.run_id, args.top_n, args.min_dissimilarity)
+    main(
+        args.run_id,
+        args.top_n,
+        args.min_dissimilarity,
+        args.ensure_positive_control_peptides,
+    )

@@ -9,8 +9,11 @@
 5) build_multivalent_mrna.py
 6) run_qc_and_report.py
 7) prepare_self_certification.py（POSITIVE_CONTROL.md / SELF_CHECK.md）
-8) prepare_simhub_delivery.py
-9) validate_feasibility.py
+8)（可选，`--prepare_structure_inputs`）prepare_mhc_chain_sequences.py  
+9)（可选，`--prepare_pandora`）run_pandora_structure.py --top_k 与 `--top_k_md` 对齐  
+10) prepare_simhub_delivery.py（支持多 `<case>_md_rXX` SimHub 子目录）  
+11) validate_feasibility.py  
+12)（目标含 full/report/simhub 时）check_simhub_evidence.py
 """
 import os
 import sys
@@ -98,6 +101,7 @@ def main(
     tm_domain_preset: str,
     tm_domain_aa: str,
     top_k_md: int,
+    prepare_pandora: bool,
     prepare_structure_inputs: bool,
     structure_seq_refresh_remote: bool,
     structure_seq_strict: bool,
@@ -121,6 +125,7 @@ def main(
     allow_proxy_scores: bool,
     target: str,
     mrna_output_suffix: str,
+    ensure_positive_control_peptides: str,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
@@ -184,6 +189,13 @@ def main(
         "--min_dissimilarity",
         str(min_dissimilarity),
     ]
+    if (ensure_positive_control_peptides or "").strip():
+        step4.extend(
+            [
+                "--ensure_positive_control_peptides",
+                ensure_positive_control_peptides.strip(),
+            ]
+        )
     step5 = [
         python_exe,
         os.path.join(scripts_dir, "build_multivalent_mrna.py"),
@@ -246,6 +258,14 @@ def main(
         step8_1.append("--refresh_remote")
     if structure_seq_strict:
         step8_1.append("--strict")
+    step8_pandora = [
+        python_exe,
+        os.path.join(scripts_dir, "run_pandora_structure.py"),
+        "--run_id",
+        run_id,
+        "--top_k",
+        str(top_k_md),
+    ]
     step9 = [
         python_exe,
         os.path.join(scripts_dir, "validate_feasibility.py"),
@@ -284,6 +304,8 @@ def main(
     for step in selected:
         if step is step8 and prepare_structure_inputs:
             run_step(step8_1)
+        if step is step8 and prepare_pandora:
+            run_step(step8_pandora)
         run_step(step)
     print("\n所选步骤执行完成。")
 
@@ -325,7 +347,17 @@ if __name__ == "__main__":
     parser.add_argument("--signal_peptide_aa", default="", help="N端信号肽手工AA")
     parser.add_argument("--tm_domain_preset", default="", choices=["", "cd8a_tm"], help="C端TM预设")
     parser.add_argument("--tm_domain_aa", default="", help="C端TM手工AA")
-    parser.add_argument("--top_k_md", type=int, default=3, help="提交 SimHub 的 Top K，默认 3")
+    parser.add_argument(
+        "--top_k_md",
+        type=int,
+        default=3,
+        help="SimHub 多维 MD 候选数（与 selected_for_md 对齐）；与 run_pandora_structure --top_k 一致，建议 3–5。",
+    )
+    parser.add_argument(
+        "--prepare_pandora",
+        action="store_true",
+        help="在 prepare_simhub_delivery 前调用 run_pandora_structure.py（--top_k = top_k_md），需本机 PANDORA 环境可用。",
+    )
     parser.add_argument(
         "--prepare_structure_inputs",
         action="store_true",
@@ -339,7 +371,14 @@ if __name__ == "__main__":
         choices=["coarse", "pandora", "afm"],
         help="SimHub 结构来源：pandora(默认)/afm/coarse；真实交付需提供 --structure_input_pdb",
     )
-    parser.add_argument("--structure_input_pdb", default="", help="structure_backend 为 pandora/afm 时必须提供外部全原子 PDB 路径")
+    parser.add_argument(
+        "--structure_input_pdb",
+        default="",
+        help=(
+            "structure_backend 为 afm 时必须提供；为 pandora 且留空时，"
+            "prepare_simhub_delivery 从 results/structure_models/pandora/.../rank_XX/complex.pdb 自动解析。"
+        ),
+    )
     parser.add_argument("--feasibility_top_n", type=int, default=10, help="可行性验证 TopN，默认 10")
     parser.add_argument(
         "--mhc2_backend",
@@ -419,6 +458,13 @@ if __name__ == "__main__":
             "留空则保持默认 mrna_vaccine.fasta（与 QC/SimHub 一致）。"
         ),
     )
+    parser.add_argument(
+        "--ensure_positive_control_peptides",
+        default="",
+        help=(
+            "传给 select_top_peptides：逗号分隔 mut_peptide；若在过滤池中但未进 Top-N，则用其替换选中集中 rank_score 最低的一条。"
+        ),
+    )
     args = parser.parse_args()
 
     main(
@@ -436,6 +482,7 @@ if __name__ == "__main__":
         tm_domain_preset=args.tm_domain_preset,
         tm_domain_aa=args.tm_domain_aa,
         top_k_md=args.top_k_md,
+        prepare_pandora=args.prepare_pandora,
         prepare_structure_inputs=args.prepare_structure_inputs,
         structure_seq_refresh_remote=args.structure_seq_refresh_remote,
         structure_seq_strict=args.structure_seq_strict,
@@ -459,4 +506,5 @@ if __name__ == "__main__":
         allow_proxy_scores=args.allow_proxy_scores,
         target=args.target,
         mrna_output_suffix=args.mrna_output_suffix,
+        ensure_positive_control_peptides=args.ensure_positive_control_peptides,
     )

@@ -9,15 +9,19 @@
 
 输出（禁止使用 SDF）：
 - deliveries/<run_id>/to_simhub/<case_id>/complex.pdb   # Chain M(α) + B(β2m) + P(peptide)，真实结构工具输出
-- deliveries/<run_id>/to_simhub/<case_id>/hla_allele.txt  # 可选，Top1 对应 HLA
+- deliveries/<run_id>/to_simhub/<case_id>/hla_allele.txt  # 可选，该 case 对应 HLA
 - deliveries/<run_id>/to_simhub/<case_id>/meta.json
-- deliveries/<run_id>/to_simhub/<case_id>/selected_for_md.csv
+- deliveries/<run_id>/to_simhub/<case_id>/selected_for_md.csv  # 多 MD case 时为单行（本 case 肽-MHC）
+
+多 MD case（Top 3–5）：在未提供 --structure_input_pdb 且 structure_backend=pandora 等自动解析 PDB 时，
+子目录命名为 `<base_case_id>_md_r01` … 与每条 rank 对齐；每条对应独立 complex / meta / dossier。
 """
 import os
 import json
 import argparse
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Tuple
+from pathlib import Path
+from typing import Dict, List, Tuple
 import pandas as pd
 import numpy as np
 
@@ -79,6 +83,28 @@ def assert_not_coarse_pdb(pdb_text: str, source_label: str) -> None:
             f"{source_label} 不满足全原子 peptide-MHC 交付要求："
             f"atom_count={atom_count}, ca_ratio={ca_ratio:.3f}, chains={sorted(chains)}"
         )
+
+
+def simhub_leaf_case_id(base_case_id: str, rank_1based: int, multi_md: bool) -> str:
+    """多 MD case 时使用稳定子目录名，否则沿用 meta 中的 base_case_id。"""
+    if not multi_md:
+        return base_case_id
+    return f"{base_case_id}_md_r{rank_1based:02d}"
+
+
+def resolve_pandora_rank_pdb(run_id: str, base_case_id: str, rank_1based: int) -> str:
+    """
+    解析 PANDORA 产出的 complex.pdb：优先 rank_XX 子目录，其次兼容旧版单层目录（仅 rank 1）。
+    """
+    root = Path("results") / "structure_models" / "pandora" / run_id / base_case_id
+    ranked = root / f"rank_{rank_1based:02d}" / "complex.pdb"
+    if ranked.is_file() and ranked.stat().st_size > 0:
+        return str(ranked)
+    if rank_1based == 1:
+        legacy = root / "complex.pdb"
+        if legacy.is_file() and legacy.stat().st_size > 0:
+            return str(legacy)
+    return ""
 
 
 def load_case_id(meta_file: str, run_id: str) -> str:
@@ -343,14 +369,18 @@ def write_run_meta(
     path: str,
     run_id: str,
     case_id: str,
+    leaf_case_ids: List[str],
     selected_count: int,
-    simhub_dir: str,
-    evidence_dir: str,
+    simhub_dirs: List[str],
+    evidence_dirs: List[str],
 ) -> None:
-    """写出 results/<run_id>/meta.json，与 SimHub meta.json 分工独立。"""
+    """写出 results/<run_id>/meta.json；支持多个 SimHub 子 case 目录."""
+    primary = simhub_dirs[0] if simhub_dirs else ""
+    evid0 = evidence_dirs[0] if evidence_dirs else ""
     data = {
         "run_id": run_id,
         "case_id": case_id,
+        "simhub_leaf_case_ids": leaf_case_ids,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "module": "ImmunoGen",
         "therapy_line": "mRNA_vaccine",
@@ -363,13 +393,91 @@ def write_run_meta(
             "qc_metrics_json": f"results/{run_id}/qc_metrics.json",
             "report_md": f"results/{run_id}/REPORT.md",
             "self_check_md": f"results/{run_id}/SELF_CHECK.md",
-            "simhub_delivery_dir": simhub_dir,
-            "simhub_evidence_dir": evidence_dir,
+            "simhub_delivery_dir": primary,
+            "simhub_delivery_dirs": simhub_dirs,
+            "simhub_evidence_dir": evid0,
+            "simhub_evidence_dirs": evidence_dirs,
         },
         "clinical_final_note": "R002/R003/R_public_001 当前仍需等待 BioDriver 患者真实 HLA-II 分型后形成临床终版。",
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _write_single_simhub_bundle(
+    run_id: str,
+    leaf_case_id: str,
+    md_row: pd.Series,
+    patient_id: str,
+    backend: str,
+    pdb_source_path: str,
+    hla_file: str,
+    allow_coarse_connectivity: bool,
+    selected_md_table: pd.DataFrame,
+) -> Tuple[str, str]:
+    """写出一个 to_simhub 子目录，返回 (simhub_dir, evidence_dir)。"""
+    out_dir = os.path.join("deliveries", run_id, "to_simhub", leaf_case_id)
+    os.makedirs(out_dir, exist_ok=True)
+
+    complex_pdb = os.path.join(out_dir, "complex.pdb")
+    hla_txt = os.path.join(out_dir, "hla_allele.txt")
+    meta_out = os.path.join(out_dir, "meta.json")
+    md_list_file = os.path.join(out_dir, "selected_for_md.csv")
+    dossier_context_file = os.path.join(out_dir, "dossier_context.json")
+
+    top_peptide = str(md_row.get("mut_peptide", "AAAAAAAAA")).strip().upper()
+    if backend == "coarse":
+        if not allow_coarse_connectivity:
+            raise ValueError("coarse 仅允许联通测试；生产交付请使用 pandora/afm，并提供真实 PDB。")
+        write_complex_pdb(complex_pdb, top_peptide[:15] if top_peptide else "AAAAAAAAA")
+    elif backend in ("pandora", "afm"):
+        if not pdb_source_path or not os.path.exists(pdb_source_path):
+            raise FileNotFoundError(f"未找到结构文件（case={leaf_case_id}）：{pdb_source_path}")
+        with open(pdb_source_path, "r", encoding="utf-8", errors="ignore") as f:
+            pdb_text = f.read()
+        assert_not_coarse_pdb(pdb_text, pdb_source_path)
+        normalized, _chain_map = normalize_chain_ids_for_contract(pdb_text)
+        with open(complex_pdb, "w", encoding="utf-8") as f:
+            f.write(normalized)
+    else:
+        raise ValueError("structure_backend 仅支持 coarse/pandora/afm。")
+
+    allele = pick_hla_allele(md_row, hla_file)
+    with open(hla_txt, "w", encoding="utf-8") as f:
+        f.write(allele + "\n")
+    write_dossier_context(dossier_context_file, run_id, leaf_case_id, md_row, allele)
+
+    delivery_meta = build_simhub_meta(
+        run_id=run_id,
+        case_id=leaf_case_id,
+        patient_id=patient_id,
+        top_row=md_row,
+        allele=allele,
+        backend=backend,
+        structure_input_pdb=pdb_source_path or "coarse_placeholder",
+    )
+    with open(meta_out, "w", encoding="utf-8") as f:
+        json.dump(delivery_meta, f, ensure_ascii=False, indent=2)
+
+    selected_md_table.to_csv(md_list_file, index=False, encoding="utf-8-sig")
+
+    evidence_dir = os.path.join("results", run_id, "simhub_evidence", leaf_case_id)
+    write_simhub_evidence_contract(evidence_dir, run_id, leaf_case_id)
+
+    for legacy in ("protein.pdb", "ligand.sdf"):
+        legacy_path = os.path.join(out_dir, legacy)
+        if os.path.exists(legacy_path):
+            try:
+                os.remove(legacy_path)
+            except OSError:
+                pass
+
+    print(f"完成: {complex_pdb}")
+    print(f"完成: {hla_txt}")
+    print(f"完成: {meta_out}")
+    print(f"完成: {md_list_file}")
+    print(f"完成: {dossier_context_file}")
+    return out_dir, evidence_dir
 
 
 def main(
@@ -386,91 +494,147 @@ def main(
     if not os.path.exists(selected_file):
         raise FileNotFoundError(f"未找到输入文件: {selected_file}")
 
-    case_id = load_case_id(input_meta_file, run_id)
+    base_case_id = load_case_id(input_meta_file, run_id)
     input_meta = _load_json_optional(input_meta_file)
     patient_id = str(input_meta.get("patient_id") or input_meta.get("subject_id") or run_id)
-    out_dir = os.path.join("deliveries", run_id, "to_simhub", case_id)
-    os.makedirs(out_dir, exist_ok=True)
-
-    complex_pdb = os.path.join(out_dir, "complex.pdb")
-    hla_txt = os.path.join(out_dir, "hla_allele.txt")
-    meta_out = os.path.join(out_dir, "meta.json")
-    md_list_file = os.path.join(out_dir, "selected_for_md.csv")
-    dossier_context_file = os.path.join(out_dir, "dossier_context.json")
 
     df = pd.read_csv(selected_file)
     if df.empty:
         raise ValueError("selected_peptides.csv 为空，无法准备 Simulation Hub 交付。")
 
     md_df = df.head(top_k).copy()
-    md_df.to_csv(md_list_file, index=False, encoding="utf-8-sig")
-
-    top_row = md_df.iloc[0]
-    top_peptide = str(top_row.get("mut_peptide", "AAAAAAAAA")).strip().upper()
     backend = structure_backend.strip().lower()
-    chain_map = {}
-    if backend == "coarse":
-        if not allow_coarse_connectivity:
-            raise ValueError("coarse 仅允许联通测试；生产交付请使用 pandora/afm，并提供 --structure_input_pdb。")
-        write_complex_pdb(complex_pdb, top_peptide[:15] if top_peptide else "AAAAAAAAA")
-        chain_map = {"M": "M", "B": "B", "P": "P"}
-    elif backend in ("pandora", "afm"):
-        if not structure_input_pdb.strip():
-            raise ValueError("structure_backend 为 pandora/afm 时，必须提供 --structure_input_pdb。")
-        src = structure_input_pdb.strip()
-        if not os.path.exists(src):
-            raise FileNotFoundError(f"未找到结构文件: {src}")
-        with open(src, "r", encoding="utf-8", errors="ignore") as f:
-            pdb_text = f.read()
-        assert_not_coarse_pdb(pdb_text, src)
-        normalized, chain_map = normalize_chain_ids_for_contract(pdb_text)
-        with open(complex_pdb, "w", encoding="utf-8") as f:
-            f.write(normalized)
+    pdb_arg = (structure_input_pdb or "").strip()
+
+    simhub_dirs: List[str] = []
+    evidence_dirs: List[str] = []
+    leaf_ids: List[str] = []
+
+    def _all_pandora_ranks_present() -> bool:
+        if backend != "pandora":
+            return True
+        for pos in range(len(md_df)):
+            if not resolve_pandora_rank_pdb(run_id, base_case_id, pos + 1):
+                return False
+        return True
+
+    # 自动多目录：Top K≥2 且未显式指定 PDB；COARSE  always multi肽；PANDORA 需每条均有 rank PDB
+    want_multi = pdb_arg == "" and backend in ("pandora", "coarse") and len(md_df) >= 2
+    multi_case = want_multi and (backend == "coarse" or _all_pandora_ranks_present())
+    if want_multi and backend == "pandora" and not multi_case:
+        print(
+            f"[prepare_simhub_delivery] 提示：期望 {len(md_df)} 例 MD，但 PANDORA 仅部分 rank PDB 齐全；"
+            f"退回单目录 «{base_case_id}»（仅用 rank_01/旧版 PDB），CSV 仍为 Top {len(md_df)} 行。"
+            f" 若需真正多 PDB 投递，请先运行 scripts/run_pandora_structure.py --top_k >= {len(md_df)}。"
+        )
+
+    if multi_case:
+        for pos in range(len(md_df)):
+            rank = pos + 1
+            row = md_df.iloc[pos]
+            leaf = simhub_leaf_case_id(base_case_id, rank, True)
+            if backend == "pandora":
+                src = resolve_pandora_rank_pdb(run_id, base_case_id, rank)
+                if not src:
+                    raise FileNotFoundError(
+                        f"PANDORA 结构缺失：{run_id} / {base_case_id} / rank_{rank:02d}/complex.pdb "
+                        f"（且无旧版单层 complex.pdb 可回退）。请先运行 scripts/run_pandora_structure.py --top_k ≥ {rank}。"
+                    )
+            else:
+                src = ""
+            smd = pd.DataFrame([row])
+            d, ev = _write_single_simhub_bundle(
+                run_id=run_id,
+                leaf_case_id=leaf,
+                md_row=row,
+                patient_id=patient_id,
+                backend=backend,
+                pdb_source_path=src,
+                hla_file=hla_file,
+                allow_coarse_connectivity=allow_coarse_connectivity,
+                selected_md_table=smd,
+            )
+            simhub_dirs.append(d)
+            evidence_dirs.append(ev)
+            leaf_ids.append(leaf)
+
+    elif pdb_arg == "" and backend == "pandora":
+        # 单列：沿用 base_case_id 目录名（兼容既有 demo_case_001）
+        src = resolve_pandora_rank_pdb(run_id, base_case_id, 1)
+        if not src:
+            raise FileNotFoundError(
+                f"PANDORA 结构缺失：请提供 --structure_input_pdb 或先运行 run_pandora_structure.py；"
+                f"期望路径 rank_01/complex.pdb 或 {base_case_id}/complex.pdb"
+            )
+        row0 = md_df.iloc[0]
+        smd = md_df if len(md_df) > 1 else pd.DataFrame([row0])
+        d, ev = _write_single_simhub_bundle(
+            run_id=run_id,
+            leaf_case_id=base_case_id,
+            md_row=row0,
+            patient_id=patient_id,
+            backend=backend,
+            pdb_source_path=src,
+            hla_file=hla_file,
+            allow_coarse_connectivity=allow_coarse_connectivity,
+            selected_md_table=smd,
+        )
+        simhub_dirs.append(d)
+        evidence_dirs.append(ev)
+        leaf_ids.append(base_case_id)
+
+    elif pdb_arg == "" and backend == "coarse" and len(md_df) == 1:
+        row0 = md_df.iloc[0]
+        d, ev = _write_single_simhub_bundle(
+            run_id=run_id,
+            leaf_case_id=base_case_id,
+            md_row=row0,
+            patient_id=patient_id,
+            backend=backend,
+            pdb_source_path="",
+            hla_file=hla_file,
+            allow_coarse_connectivity=allow_coarse_connectivity,
+            selected_md_table=md_df,
+        )
+        simhub_dirs.append(d)
+        evidence_dirs.append(ev)
+        leaf_ids.append(base_case_id)
+
     else:
-        raise ValueError("structure_backend 仅支持 coarse/pandora/afm。")
+        # 显式 PDB：历史行为——单目录 + 同一结构，selected_for_md 仍列 Top K 行
+        if not pdb_arg:
+            raise ValueError(
+                "structure_backend 为 afm 时必须提供 --structure_input_pdb；"
+                "pandora 也可显式指定 PDB，或留空以自动解析 results/structure_models/pandora/..."
+            )
+        if not os.path.exists(pdb_arg):
+            raise FileNotFoundError(f"未找到结构文件: {pdb_arg}")
+        row0 = md_df.iloc[0]
+        d, ev = _write_single_simhub_bundle(
+            run_id=run_id,
+            leaf_case_id=base_case_id,
+            md_row=row0,
+            patient_id=patient_id,
+            backend=backend,
+            pdb_source_path=pdb_arg,
+            hla_file=hla_file,
+            allow_coarse_connectivity=allow_coarse_connectivity,
+            selected_md_table=md_df,
+        )
+        simhub_dirs.append(d)
+        evidence_dirs.append(ev)
+        leaf_ids.append(base_case_id)
 
-    allele = pick_hla_allele(top_row, hla_file)
-    with open(hla_txt, "w", encoding="utf-8") as f:
-        f.write(allele + "\n")
-    write_dossier_context(dossier_context_file, run_id, case_id, top_row, allele)
-
-    delivery_meta = build_simhub_meta(
-        run_id=run_id,
-        case_id=case_id,
-        patient_id=patient_id,
-        top_row=top_row,
-        allele=allele,
-        backend=backend,
-        structure_input_pdb=structure_input_pdb,
-    )
-    with open(meta_out, "w", encoding="utf-8") as f:
-        json.dump(delivery_meta, f, ensure_ascii=False, indent=2)
-
-    evidence_dir = os.path.join("results", run_id, "simhub_evidence", case_id)
-    write_simhub_evidence_contract(evidence_dir, run_id, case_id)
+    primary_leaf = leaf_ids[0]
     write_run_meta(
         os.path.join("results", run_id, "meta.json"),
         run_id,
-        case_id,
+        primary_leaf,
+        leaf_ids,
         len(df),
-        out_dir,
-        evidence_dir,
+        simhub_dirs,
+        evidence_dirs,
     )
-
-    # 移除旧版文件名（若存在），避免与契约混淆
-    for legacy in ("protein.pdb", "ligand.sdf"):
-        legacy_path = os.path.join(out_dir, legacy)
-        if os.path.exists(legacy_path):
-            try:
-                os.remove(legacy_path)
-            except OSError:
-                pass
-
-    print(f"完成: {complex_pdb}")
-    print(f"完成: {hla_txt}")
-    print(f"完成: {meta_out}")
-    print(f"完成: {md_list_file}")
-    print(f"完成: {dossier_context_file}")
 
 
 if __name__ == "__main__":
@@ -486,7 +650,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--structure_input_pdb",
         default="",
-        help="structure_backend 为 pandora/afm 时，提供外部 PDB 路径。",
+        help=(
+            "pandora/afm：显式 PDB 时使用单目录历史行为；留空且 pandora 时从 "
+            "results/structure_models/pandora/<run>/<case>/rank_XX/complex.pdb 自动解析（多 MD）。"
+        ),
     )
     parser.add_argument(
         "--allow_coarse_connectivity",
