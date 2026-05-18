@@ -1,0 +1,23 @@
+{
+  "candidate_id": "R_public_001:public_case_001_md_r03:LLGRNSFEV",
+  "therapy_line": "mRNA_vaccine",
+  "peptide": {
+    "mut_peptide": "LLGRNSFEV",
+    "wt_peptide": "LLGRNSFEI",
+    "hla_allele": "HLA-A*02:01",
+    "mutation": "TP53_R248Q",
+    "variant_vaf": 0.22
+  },
+  "scores": {
+    "affinity_nM": "not_provided",
+    "immunogenicity": "not_provided",
+    "wt_dissimilarity": 0.1111111111111111,
+    "rank_score": 0.3917896370251906
+  },
+  "mrna_materials": {
+    "mrna_fasta": "results/R_public_001/mrna_vaccine.fasta",
+    "utr_orf_polyA_design": "results/R_public_001/mrna_design.json",
+    "modification_strategy": "N1-methylpseudouridine"
+  },
+  "target_rationale": "Top peptide-MHC candidate selected by ImmunoGen rank_score; mRNA materials point to the multivalent vaccine design for this run."
+}

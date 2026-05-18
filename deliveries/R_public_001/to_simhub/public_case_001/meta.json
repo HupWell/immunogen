@@ -7,7 +7,7 @@
   "stage_versions": {
     "immunogen": "v0.1.0"
   },
-  "timestamp": "2026-05-11T11:04:32+08:00",
+  "timestamp": "2026-05-12T09:18:49+08:00",
   "molecule_type": "peptide_mhc",
   "target_name": "HLA-C*01:02 peptide-MHC complex",
   "target_uniprot": "P04222",

@@ -255,6 +255,10 @@ def main(
     n_jobs: Optional[int],
     top_k: int,
 ) -> None:
+    # PANDORA/MODELLER 会切换 cwd；后续循环仍依赖仓库根下的相对路径，故统一锚定到本脚本所在仓库根。
+    repo_root = Path(__file__).resolve().parent.parent
+    os.chdir(repo_root)
+
     # PANDORA 0.9 调用 MUSCLE 旧版 -in/-out 参数；项目内包装器会转成 MUSCLE 5 的真实参数。
     wrapper_dir = Path("tools") / "pandora_bin"
     if wrapper_dir.exists():
@@ -269,6 +273,7 @@ def main(
     pdb_r = Path(pdb_root)
 
     for i in range(k):
+        os.chdir(repo_root)
         top = _selected_row(run_id, i)
         # top_k==1：保持旧目录 results/structure_models/pandora/run/case/（无 rank 子目录）
         # top_k>1：每条落在 rank_XX/complex.pdb，与 prepare_simhub_delivery 多 MD case 对齐

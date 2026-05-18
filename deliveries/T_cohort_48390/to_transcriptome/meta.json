@@ -1,0 +1,10 @@
+{
+  "run_id": "T_cohort_48390",
+  "cohort_id": "48390",
+  "input_type": "bulk_transcriptome",
+  "tpm_path": "/root/autodl-tmp/data/transcriptome/raw/tpm/▒φ┤∩╢¿┴┐▒φ╕±/TPM_48390_cleaning.txt",
+  "pdata_path": "/root/autodl-tmp/data/transcriptome/raw/pdata/样本信息表/pdata_48390.csv",
+  "pairing_status": "paired",
+  "ranking_mode": "clinical_proxy",
+  "exploratory": true
+}

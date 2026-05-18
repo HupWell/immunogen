@@ -17,7 +17,7 @@ from hla_typing_spec import (
 )
 
 REQUIRED_CSV_COLUMNS = ["mut_peptide", "wt_peptide", "variant_vaf"]
-OPTIONAL_CSV_COLUMNS = ["mutation", "transcript_id"]
+OPTIONAL_CSV_COLUMNS = ["mutation", "transcript_id", "gene_name", "gene_symbol"]
 REQUIRED_HLA_KEYS = list(REQUIRED_HLA_I_KEYS)
 
 

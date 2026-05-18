@@ -28,6 +28,31 @@ Thumbs.db
 # Project outputs
 results/
 
+# 转录组原始数据与 zip（仅提交 manifest + cohort_groups.yaml）
+data/transcriptome/raw/
+data/_expr_extract/
+data/_extracted_sample/
+data/_inspect/
+data/*.zip
+data/表达定量表格.zip
+data/样本信息表.zip
+
+# 交付目录中的大文件 / 本地打包
+deliveries/**/to_transcriptome/tpm_matrix.tsv
+deliveries/**/*.zip
+immunogen_server_copy_clean.zip
+
+# 外部依赖大二进制（按需本地放置）
+external_refs/PANDORA_database_default/
+external_refs/colabfold_data/
+external_refs/downloads/
+external_refs/DeepImmuno-main/
+external_refs/LinearDesign/
+external_refs/MixMHCpred/
+external_refs/PRIME-master/
+external_refs/Repitope/
+data/public_iedb/
+
 # Simulation Hub 粗构象（体积较大时可取消注释以不入库）
 # deliveries/**/to_simhub/**/complex.pdb
 

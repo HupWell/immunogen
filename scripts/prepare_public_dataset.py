@@ -12,6 +12,7 @@
 """
 import os
 import json
+import re
 import argparse
 import pandas as pd
 
@@ -30,7 +31,20 @@ COMMON_COLUMN_ALIASES = {
     "wt_peptide": ["wt_peptide", "wt_pep", "wildtype_peptide", "normal_peptide"],
     "transcript_id": ["transcript_id", "transcript", "enst_id", "tx_id"],
     "variant_vaf": ["variant_vaf", "vaf", "tumor_vaf", "af"],
+    "gene_name": ["gene_name", "gene_symbol", "gene", "hugo_symbol", "symbol"],
 }
+
+MUTATION_GENE_RE = re.compile(r"^([A-Z0-9]+)[_.]")
+
+
+def infer_gene_from_mutation(mutation) -> str:
+    if mutation is None or (isinstance(mutation, float) and pd.isna(mutation)):
+        return ""
+    text = str(mutation).strip()
+    if not text or text.lower() == "nan":
+        return ""
+    m = MUTATION_GENE_RE.match(text.upper())
+    return m.group(1) if m else ""
 
 
 def split_map_arg(mapping_text: str) -> dict:
@@ -121,6 +135,11 @@ def build_output_df(src_df: pd.DataFrame, col_map: dict) -> pd.DataFrame:
     # 过滤空突变肽与过短肽段
     out = out[out["mut_peptide"].str.len() >= 8].copy()
     out = out.drop_duplicates(subset=["mutation", "mut_peptide"]).reset_index(drop=True)
+    if "gene_name" not in out.columns:
+        out["gene_name"] = out["mutation"].map(infer_gene_from_mutation)
+    else:
+        empty_gene = out["gene_name"].astype(str).str.strip().isin(["", "nan", "NA"])
+        out.loc[empty_gene, "gene_name"] = out.loc[empty_gene, "mutation"].map(infer_gene_from_mutation)
     return out
 
 

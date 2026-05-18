@@ -1,0 +1,10 @@
+{
+  "run_id": "T_cohort_39004",
+  "cohort_id": "39004",
+  "input_type": "bulk_transcriptome",
+  "tpm_path": "/root/autodl-tmp/data/transcriptome/raw/tpm/▒φ┤∩╢¿┴┐▒φ╕±/TPM_39004_cleaning.txt",
+  "pdata_path": "/root/autodl-tmp/data/transcriptome/raw/pdata/样本信息表/pdata_39004.csv",
+  "pairing_status": "paired",
+  "ranking_mode": "tumor_normal",
+  "exploratory": false
+}

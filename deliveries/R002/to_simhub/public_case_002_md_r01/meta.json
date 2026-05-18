@@ -1,0 +1,27 @@
+{
+  "case_id": "public_case_002_md_r01",
+  "run_id": "R002",
+  "patient_id": "R002",
+  "upstream_module": "ImmunoGen",
+  "module_version": "ImmunoGen-v0.1.0",
+  "stage_versions": {
+    "immunogen": "v0.1.0"
+  },
+  "timestamp": "2026-05-18T10:24:07+08:00",
+  "molecule_type": "peptide_mhc",
+  "target_name": "HLA-A*02:01 peptide-MHC complex",
+  "target_uniprot": "P01892",
+  "target_evidence_level": "medium",
+  "upstream_score": 0.075,
+  "priority": "low",
+  "notes": [
+    "Input package follows SimHub peptide_mhc contract.",
+    "For peptide_mhc, parent_hit_id/scaffold_smiles/generation_source are kept for schema compatibility.",
+    "No SDF is provided; peptide-MHC must use protein residue topology.",
+    "complex.pdb was prepared from pandora structure input: results/structure_models/pandora/R002/public_case_002/rank_01/complex.pdb."
+  ],
+  "parent_hit_id": null,
+  "scaffold_smiles": null,
+  "generation_source": "de_novo",
+  "carrier": null
+}

@@ -1,0 +1,10 @@
+{
+  "run_id": "T_cohort_1992",
+  "cohort_id": "1992",
+  "input_type": "bulk_transcriptome",
+  "tpm_path": "/root/autodl-tmp/data/transcriptome/raw/tpm/▒φ┤∩╢¿┴┐▒φ╕±/TPM_1992_cleaning.txt",
+  "pdata_path": "/root/autodl-tmp/data/transcriptome/raw/pdata/样本信息表/pdata_1992.csv",
+  "pairing_status": "paired",
+  "ranking_mode": "tumor_normal",
+  "exploratory": false
+}

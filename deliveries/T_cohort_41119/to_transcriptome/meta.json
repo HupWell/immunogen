@@ -1,0 +1,10 @@
+{
+  "run_id": "T_cohort_41119",
+  "cohort_id": "41119",
+  "input_type": "bulk_transcriptome",
+  "tpm_path": "/root/autodl-tmp/data/transcriptome/raw/tpm/▒φ┤∩╢¿┴┐▒φ╕±/TPM_41119_cleaning.txt",
+  "pdata_path": "/root/autodl-tmp/data/transcriptome/raw/pdata/样本信息表/pdata_41119.csv",
+  "pairing_status": "paired",
+  "ranking_mode": "tumor_normal",
+  "exploratory": false
+}

@@ -2,6 +2,8 @@
 """
 功能：一键串行执行 ImmunoGen MVP 全流程。
 执行顺序：
+0)（可选，`--target transcriptome_prior`）bulk 基因优先级侧车，见 README §1.1A  
+0b)（可选，`--target b_to_a_simhub`）filter_neoantigen_by_gene_rank.py → 路径 A 全流程  
 1) validate_input.py
 2) run_immunogenicity_adapters.py
 3) predict_mhc_ranking.py
@@ -10,7 +12,7 @@
 6) run_qc_and_report.py
 7) prepare_self_certification.py（POSITIVE_CONTROL.md / SELF_CHECK.md）
 8)（可选，`--prepare_structure_inputs`）prepare_mhc_chain_sequences.py  
-9)（可选，`--prepare_pandora`）run_pandora_structure.py --top_k 与 `--top_k_md` 对齐  
+9)（可选，`--prepare_pandora`）run_pandora_structure.py --top_k 与 `--top_k_md` 对齐（可用 `--pandora_python` 指定含 csb-pandora 的解释器）  
 10) prepare_simhub_delivery.py（支持多 `<case>_md_rXX` SimHub 子目录）  
 11) validate_feasibility.py  
 12)（目标含 full/report/simhub 时）check_simhub_evidence.py
@@ -19,14 +21,32 @@ import os
 import sys
 import argparse
 import subprocess
+from typing import Dict, Optional
 
 
-def run_step(command: list):
+def run_step(command: list, env: Optional[Dict[str, str]] = None):
     """执行单个步骤并打印命令，失败时立即退出。"""
     print(f"\n[执行] {' '.join(command)}")
-    result = subprocess.run(command, check=False)
+    result = subprocess.run(command, check=False, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"步骤执行失败，退出码: {result.returncode}")
+
+
+def _pandora_step_env(pandora_exe: str) -> Optional[Dict[str, str]]:
+    """
+    为 PANDORA 子进程补齐 PATH 与 MUSCLE：tools/pandora_bin/muscle 依赖真实 muscle，
+    且 shebang 的 python3 应优先落在含 csb-pandora 的 conda env/bin。
+    """
+    bin_dir = os.path.dirname(os.path.abspath(pandora_exe))
+    if not bin_dir or not os.path.isdir(bin_dir):
+        return None
+    muscle = os.path.join(bin_dir, "muscle")
+    if not os.path.isfile(muscle):
+        return None
+    env = os.environ.copy()
+    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    env["PANDORA_REAL_MUSCLE"] = muscle
+    return env
 
 
 def _preflight_mhc1_backend(run_id: str, backend_netmhcpan: str, backend_bigmhc: str):
@@ -126,10 +146,57 @@ def main(
     target: str,
     mrna_output_suffix: str,
     ensure_positive_control_peptides: str,
+    pandora_python: str,
+    bulk_tpm_path: str,
+    bulk_case_columns: str,
+    bulk_control_columns: str,
+    bulk_gene_col_name: str,
+    bulk_pseudo: float,
+    bulk_out_subdir: str,
+    cohort_id: str = "",
+    b_to_a_top_n_genes: int = 500,
+    b_to_a_rank_subdir: str = "transcriptome_prior",
+    b_to_a_min_log2fc: Optional[float] = None,
+    skip_b_to_a_filter: bool = False,
 ):
     """按固定顺序执行全流程。"""
     python_exe = sys.executable
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    # PANDORA 常安装在独立 conda 环境；其余步骤仍用当前解释器（如含 TensorFlow 的排名环境）。
+    pandora_exe = (pandora_python or "").strip() or python_exe
+
+    out_dir_bulk = os.path.join("results", run_id, (bulk_out_subdir or "transcriptome_prior").strip() or "transcriptome_prior")
+    step0_bulk_rank = [
+        python_exe,
+        os.path.join(scripts_dir, "bulk_expression_gene_rank.py"),
+        "--tpm_path",
+        (bulk_tpm_path or "").strip(),
+        "--out_dir",
+        out_dir_bulk,
+        "--case_columns",
+        (bulk_case_columns or "").strip(),
+        "--control_columns",
+        (bulk_control_columns or "").strip(),
+    ]
+    gcn = (bulk_gene_col_name or "gene_name").strip() or "gene_name"
+    if gcn != "gene_name":
+        step0_bulk_rank.extend(["--gene_col_name", gcn])
+    if float(bulk_pseudo) != 1.0:
+        step0_bulk_rank.extend(["--pseudo", str(float(bulk_pseudo))])
+
+    rank_sub = (b_to_a_rank_subdir or "transcriptome_prior").strip() or "transcriptome_prior"
+    step0_gene_filter = [
+        python_exe,
+        os.path.join(scripts_dir, "filter_neoantigen_by_gene_rank.py"),
+        "--run_id",
+        run_id,
+        "--top_n_genes",
+        str(int(b_to_a_top_n_genes)),
+        "--rank_subdir",
+        rank_sub,
+    ]
+    if b_to_a_min_log2fc is not None:
+        step0_gene_filter.extend(["--min_log2fc", str(float(b_to_a_min_log2fc))])
 
     step1 = [
         python_exe,
@@ -259,7 +326,7 @@ def main(
     if structure_seq_strict:
         step8_1.append("--strict")
     step8_pandora = [
-        python_exe,
+        pandora_exe,
         os.path.join(scripts_dir, "run_pandora_structure.py"),
         "--run_id",
         run_id,
@@ -281,19 +348,73 @@ def main(
         run_id,
     ]
 
-    if require_real_mhc1_cv and backend_mhc1_netmhcpan == "off" and backend_mhc1_bigmhc == "off":
+    if target != "transcriptome_prior" and require_real_mhc1_cv and backend_mhc1_netmhcpan == "off" and backend_mhc1_bigmhc == "off":
         raise RuntimeError("已启用 --require_real_mhc1_cv，但两个 MHC-I 交叉验证后端均为 off。")
 
+    path_a_full = [step1, step2, step3, step4, step5, step6, step8, step10, step7, step9]
     pipelines = {
-        "full": [step1, step2, step3, step4, step5, step6, step8, step10, step7, step9],
+        "full": path_a_full,
         "mhc_ranking": [step1, step2, step3],
         "report": [step6, step10, step7],
         "simhub": [step8, step10, step7],
         "feasibility": [step9],
+        "transcriptome_prior": [step0_bulk_rank],
+        "b_to_a_simhub": path_a_full,
     }
-    selected = pipelines[target]
+    selected = list(pipelines[target])
 
-    print(f"开始执行 ImmunoGen 流程（target={target}）...")
+    if target == "b_to_a_simhub":
+        rank_csv = os.path.join("results", run_id, rank_sub, "candidate_gene_ranking.csv")
+        neo_csv = os.path.join("deliveries", run_id, "to_immunogen", "neoantigen_candidates.csv")
+        if not skip_b_to_a_filter:
+            if not os.path.isfile(rank_csv):
+                raise FileNotFoundError(
+                    f"target=b_to_a_simhub 需要路径 B 排名: {rank_csv}；"
+                    "可先 --target transcriptome_prior 或提供 --cohort_id。"
+                )
+            if not os.path.isfile(neo_csv):
+                raise FileNotFoundError(f"target=b_to_a_simhub 需要: {neo_csv}")
+            selected = [step0_gene_filter] + selected
+        print(f"开始执行 B→A→SimHub（run_id={run_id}）...", flush=True)
+
+    if target == "transcriptome_prior":
+        cid = (cohort_id or "").strip()
+        if cid:
+            # 一队列一个 run_id：由 run_transcriptome_cohort 写契约并排名
+            cohort_script = os.path.join(scripts_dir, "run_transcriptome_cohort.py")
+            cohort_cmd = [
+                python_exe,
+                cohort_script,
+                "--cohort_id",
+                cid,
+                "--run_id",
+                run_id,
+                "--out_subdir",
+                (bulk_out_subdir or "transcriptome_prior").strip() or "transcriptome_prior",
+                "--pseudo",
+                str(float(bulk_pseudo)),
+            ]
+            print(f"开始执行 ImmunoGen 流程（target={target}, cohort_id={cid}）...", flush=True)
+            run_step(cohort_cmd)
+            print("\n所选步骤执行完成。")
+            return
+        if not (bulk_tpm_path or "").strip():
+            raise RuntimeError(
+                "target=transcriptome_prior 时必须提供 --bulk_tpm_path，或改用 --cohort_id。"
+            )
+        if not (bulk_case_columns or "").strip() or not (bulk_control_columns or "").strip():
+            raise RuntimeError(
+                "target=transcriptome_prior 时必须同时提供 --bulk_case_columns 与 "
+                "--bulk_control_columns（未使用 --cohort_id 时）。"
+            )
+
+    print(f"开始执行 ImmunoGen 流程（target={target}）...", flush=True)
+    if target == "transcriptome_prior":
+        for step in selected:
+            run_step(step)
+        print("\n所选步骤执行完成。")
+        return
+
     if step2 in selected:
         _preflight_immunogenicity_backend(run_id, backend_deepimmuno, "deepimmuno")
         _preflight_immunogenicity_backend(run_id, backend_prime, "prime")
@@ -301,11 +422,24 @@ def main(
     if step3 in selected:
         _preflight_mhc1_backend(run_id, backend_mhc1_netmhcpan, backend_mhc1_bigmhc)
         _preflight_mhc2_backend(run_id, mhc2_backend)
+    if prepare_pandora and step8 in selected:
+        probe = subprocess.run(
+            [pandora_exe, "-c", "import PANDORA"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if probe.returncode != 0:
+            raise RuntimeError(
+                "已启用 --prepare_pandora，但当前 PANDORA 解释器无法 import PANDORA。"
+                f" 解释器: {pandora_exe}；stderr: {(probe.stderr or '').strip()}。"
+                " 请安装 csb-pandora 或使用 --pandora_python 指向已安装该包的环境（例如 pandora_src 的 python）。"
+            )
     for step in selected:
         if step is step8 and prepare_structure_inputs:
             run_step(step8_1)
         if step is step8 and prepare_pandora:
-            run_step(step8_pandora)
+            run_step(step8_pandora, env=_pandora_step_env(pandora_exe))
         run_step(step)
     print("\n所选步骤执行完成。")
 
@@ -356,7 +490,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--prepare_pandora",
         action="store_true",
-        help="在 prepare_simhub_delivery 前调用 run_pandora_structure.py（--top_k = top_k_md），需本机 PANDORA 环境可用。",
+        help="在 prepare_simhub_delivery 前调用 run_pandora_structure.py（--top_k = top_k_md）；需 PANDORA 可用，可用 --pandora_python 指定解释器。",
+    )
+    parser.add_argument(
+        "--pandora_python",
+        default="",
+        help=(
+            "仅用于 run_pandora_structure：已安装 csb-pandora（及 MODELLER 等）的 python 可执行文件路径；"
+            "留空则与当前流程使用同一解释器。"
+        ),
     )
     parser.add_argument(
         "--prepare_structure_inputs",
@@ -447,8 +589,81 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target",
         default="full",
-        choices=["full", "mhc_ranking", "report", "simhub", "feasibility"],
-        help="执行范围：full=全流程；mhc_ranking=到表位排名；report=仅报告/自证；simhub=仅交付封装；feasibility=仅可行性。",
+        choices=[
+            "full",
+            "mhc_ranking",
+            "report",
+            "simhub",
+            "feasibility",
+            "transcriptome_prior",
+            "b_to_a_simhub",
+        ],
+        help=(
+            "执行范围：full=路径 A 全流程；b_to_a_simhub=基因池过滤后路径 A 全流程；"
+            "transcriptome_prior=仅 bulk 基因侧车（见 README §1.1A）。"
+        ),
+    )
+    parser.add_argument(
+        "--b_to_a_top_n_genes",
+        type=int,
+        default=500,
+        help="target=b_to_a_simhub：取路径 B Top 基因数过滤突变肽，默认 500。",
+    )
+    parser.add_argument(
+        "--b_to_a_rank_subdir",
+        default="transcriptome_prior",
+        help="target=b_to_a_simhub：基因排名子目录（位于 results/<run_id>/ 下）。",
+    )
+    parser.add_argument(
+        "--b_to_a_min_log2fc",
+        type=float,
+        default=None,
+        help="target=b_to_a_simhub：过滤前仅保留 log2FC >= 该值的基因。",
+    )
+    parser.add_argument(
+        "--skip_b_to_a_filter",
+        action="store_true",
+        help="target=b_to_a_simhub：跳过基因过滤（neoantigen 已手动收窄时）。",
+    )
+    parser.add_argument(
+        "--bulk_tpm_path",
+        default="",
+        help="仅 target=transcriptome_prior：基因×样本表达矩阵路径（首列基因名，其余为数值）。",
+    )
+    parser.add_argument(
+        "--bulk_case_columns",
+        default="",
+        help="仅 target=transcriptome_prior：病例组样本列名，逗号分隔，须与矩阵表头一致。",
+    )
+    parser.add_argument(
+        "--bulk_control_columns",
+        default="",
+        help="仅 target=transcriptome_prior：对照组样本列名，逗号分隔。",
+    )
+    parser.add_argument(
+        "--bulk_gene_col_name",
+        default="gene_name",
+        help="仅 target=transcriptome_prior：输出 CSV 中基因列显示名（默认 gene_name）。",
+    )
+    parser.add_argument(
+        "--bulk_pseudo",
+        type=float,
+        default=1.0,
+        help="仅 target=transcriptome_prior：log2FC 均值平滑伪计数，默认 1。",
+    )
+    parser.add_argument(
+        "--bulk_out_subdir",
+        default="transcriptome_prior",
+        help="仅 target=transcriptome_prior：输出子目录名，位于 results/<run_id>/<subdir>/，默认 transcriptome_prior。",
+    )
+    parser.add_argument(
+        "--cohort_id",
+        default="",
+        help=(
+            "仅 target=transcriptome_prior：队列数字 ID（如 39004），"
+            "自动从 data/表达定量表格.zip 与 样本信息表.zip 解析分组并运行；"
+            "建议 run_id=T_cohort_<cohort_id>。"
+        ),
     )
     parser.add_argument(
         "--mrna_output_suffix",
@@ -507,4 +722,16 @@ if __name__ == "__main__":
         target=args.target,
         mrna_output_suffix=args.mrna_output_suffix,
         ensure_positive_control_peptides=args.ensure_positive_control_peptides,
+        pandora_python=args.pandora_python,
+        bulk_tpm_path=args.bulk_tpm_path,
+        bulk_case_columns=args.bulk_case_columns,
+        bulk_control_columns=args.bulk_control_columns,
+        bulk_gene_col_name=args.bulk_gene_col_name,
+        bulk_pseudo=args.bulk_pseudo,
+        bulk_out_subdir=args.bulk_out_subdir,
+        cohort_id=args.cohort_id,
+        b_to_a_top_n_genes=args.b_to_a_top_n_genes,
+        b_to_a_rank_subdir=args.b_to_a_rank_subdir,
+        b_to_a_min_log2fc=args.b_to_a_min_log2fc,
+        skip_b_to_a_filter=args.skip_b_to_a_filter,
     )

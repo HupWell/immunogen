@@ -1,0 +1,143 @@
+# 队列分组规则（覆盖自动启发式）。strategy: manual | skip
+# exploratory: true 表示探索性排序（death/meta 等），不得单独作为疫苗依据。
+
+default_strategy_order:
+  - tumor_normal
+  - exploratory_death
+  - exploratory_meta
+
+cohorts:
+  "39004":
+    strategy: manual
+    case_column: source_name_ch1
+    case_values:
+      - "Human Breast Tumor"
+    control_column: source_name_ch1
+    control_values:
+      - "Human Breast"
+    exploratory: false
+    caution_zh: "肿瘤组织 vs 非肿瘤乳腺组织（source_name），用于基因优先级侧车。"
+
+  "103091":
+    strategy: manual
+    case_column: death:ch1
+    case_values:
+      - "1"
+    control_column: death:ch1
+    control_values:
+      - "0"
+    exploratory: true
+    caution_zh: "探索性：死亡=1 vs 0，全为肿瘤样本，代理临床结局而非正常对照。"
+
+  "1456":
+    strategy: manual
+    case_column: characteristics_ch1.3
+    case_values:
+      - "DEATH: 1"
+    control_column: characteristics_ch1.3
+    control_values:
+      - "DEATH: 0"
+    exploratory: true
+    caution_zh: "探索性：DEATH 二分，全为肿瘤样本，代理生存结局。"
+
+  "24450":
+    strategy: manual
+    case_column: characteristics_ch1.3
+    case_values:
+      - "bddm status: 1 (breast cancer death or distant metastasis)"
+    control_column: characteristics_ch1.3
+    control_values:
+      - "bddm status: 0 (no event or censored)"
+    exploratory: true
+    caution_zh: "探索性：BDDM 事件二分，代理复发/转移或乳腺癌死亡。"
+
+  "58644":
+    strategy: manual
+    case_column: characteristics_ch1.1
+    case_values:
+      - "event: 1"
+    control_column: characteristics_ch1.1
+    control_values:
+      - "event: 0"
+    exploratory: true
+    caution_zh: "探索性：随访 event 二分，全为肿瘤样本。"
+
+  "48390":
+    strategy: manual
+    case_column: characteristics_ch1.6
+    case_values:
+      - "event: recurrence, metastasis,  or disease-specific mortality"
+    control_column: characteristics_ch1.6
+    control_values:
+      - "event: disease-free"
+    exploratory: true
+    caution_zh: "探索性：复发/转移或疾病相关死亡 vs 无病生存。"
+
+  "9893":
+    strategy: manual
+    case_column: characteristics_ch1
+    case_values:
+      - "status: R"
+    control_column: characteristics_ch1
+    control_values:
+      - "status: RF"
+    exploratory: true
+    caution_zh: "探索性：复发(R) vs 无复发(RF)，全为肿瘤样本。"
+
+  "88770":
+    strategy: manual
+    case_column: death:ch1
+    case_values:
+      - "Yes"
+    control_column: death:ch1
+    control_values:
+      - "No"
+    exploratory: true
+    caution_zh: "探索性：死亡 Yes/No，全为 ILC 肿瘤组织。"
+
+  "22226":
+    strategy: manual
+    case_column: "survival status (7=alive; 8=dead, 9=lost):ch2"
+    case_values:
+      - "8"
+    control_column: "survival status (7=alive; 8=dead, 9=lost):ch2"
+    control_values:
+      - "7"
+    exploratory: true
+    caution_zh: "探索性：ISPY 新辅助队列，死亡 vs 存活，全为肿瘤样本。"
+
+  "20685":
+    strategy: skip
+    note_zh: "仅原发癌组织分型，无肿瘤/正常或可比分组，暂不跑 log2FC。"
+
+  "86166":
+    strategy: skip
+    note_zh: "队列内均为乳腺腺癌组织，缺少可比分组。"
+
+  "3143":
+    strategy: skip
+    note_zh: "全部为原发乳腺癌冻存组织，无正常对照。"
+
+  "47994":
+    strategy: skip
+    note_zh: "source_name 均为 Breast tumor，无正常对照。"
+
+  "16446":
+    strategy: skip
+    note_zh: "临床 TNM/分子标注队列，无肿瘤 vs 正常组织字段。"
+
+  "6532":
+    strategy: skip
+    note_zh: "临床病理标注队列，无肿瘤 vs 正常组织字段。"
+
+  "7390":
+    strategy: skip
+    note_zh: "多中心临床队列，无肿瘤 vs 正常组织字段。"
+
+  "23428":
+    strategy: skip
+    note_zh: "治疗试验小队列，Alive 对照仅 2 例，不满足最小样本阈值。"
+
+  "31863":
+    strategy: skip
+    note_zh: "pdata GSM 与 TPM 列名零交集，需核对表达矩阵与样本表对应关系。"

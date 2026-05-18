@@ -1,0 +1,10 @@
+{
+  "run_id": "T_cohort_59246",
+  "cohort_id": "59246",
+  "input_type": "bulk_transcriptome",
+  "tpm_path": "/root/autodl-tmp/data/transcriptome/raw/tpm/▒φ┤∩╢¿┴┐▒φ╕±/TPM_59246_cleaning.txt",
+  "pdata_path": "/root/autodl-tmp/data/transcriptome/raw/pdata/样本信息表/pdata_59246.csv",
+  "pairing_status": "paired",
+  "ranking_mode": "tumor_normal",
+  "exploratory": false
+}
